@@ -46,3 +46,70 @@ input:focus, select:focus, textarea:focus { border-color: #2563eb; }
   .homework { flex-direction: column; align-items: stretch; }
   .topbar { flex-wrap: wrap; }
 }
+
+/* HOMEWORK DIARY: LIGHT AND DARK MODE FIX */
+
+.app {
+  --page-bg: #f3f6fb;
+  --surface: #ffffff;
+  --text: #172033;
+  --muted: #526078;
+  --border: #d8e0ec;
+  --input-bg: #ffffff;
+
+  background-color: var(--page-bg);
+  color: var(--text);
+}
+
+.app.theme-dark {
+  --page-bg: #101827;
+  --surface: #1c2738;
+  --text: #f1f5f9;
+  --muted: #c0ccdc;
+  --border: #3b4a60;
+  --input-bg: #263449;
+
+  background-color: var(--page-bg);
+  color: var(--text);
+}
+
+.app input,
+.app select,
+.app textarea {
+  color: var(--text);
+  background-color: var(--input-bg);
+  border-color: var(--border);
+}
+
+.app .profile-card,
+.app .homework-item,
+.app .card,
+.app .panel {
+  background-color: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.app .profile-information p,
+.app .muted,
+.app .subtitle {
+  color: var(--muted);
+}
+
+.app:not(.theme-dark) .secondary-button,
+.app:not(.theme-dark) .secondary {
+  color: #172033;
+  background-color: #e7edf6;
+}
+
+.app.theme-dark .secondary-button,
+.app.theme-dark .secondary {
+  color: #f1f5f9;
+  background-color: #263449;
+}
+
+.app button,
+.app .button {
+  opacity: 1;
+}
+
