@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import "./styles.css";
@@ -190,15 +191,9 @@ function App() {
           </section>
         ) : session && profile ? (
           profile.role === "Teacher" ? (
-            <TeacherDashboard
-              profile={profile}
-              onLogout={logout}
-            />
+            <TeacherDashboard profile={profile} onLogout={logout} />
           ) : (
-            <StudentDashboard
-              profile={profile}
-              onLogout={logout}
-            />
+            <StudentDashboard profile={profile} onLogout={logout} />
           )
         ) : session && !profile ? (
           <section className="panel message-panel">
@@ -263,14 +258,18 @@ function LoginPage({
     setSuccess("");
     setSubmitting(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
 
-    if (error) setError(error.message);
-
-    setSubmitting(false);
+      if (error) setError(error.message);
+    } catch (err) {
+      setError(err.message || "Login failed. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -468,11 +467,10 @@ function RegisterPage({
         );
       }
 
+      // FIXED: the success message is one valid JavaScript string.
       if (authData.session) {
         setSuccess(
-          "Your account and profile were created. If your dashboard does not open, log in using your new 
-
-account."
+          "Your account and profile were created. If your dashboard does not open, log in using your new account."
         );
       } else {
         setSuccess(
@@ -1135,6 +1133,7 @@ function TeacherDashboard({ profile, onLogout }) {
 
                   <h3>{item.subject}</h3>
                   <p className="homework-description">{item.homework}</p>
+
                   <div className="completion-student">
                     {student?.photo_url ? (
                       <img src={student.photo_url} alt="" />
@@ -1418,6 +1417,7 @@ function StudentDashboard({ profile, onLogout }) {
 
                 <h3>{item.subject}</h3>
                 <p className="homework-description">{item.homework}</p>
+
                 <div className="homework-meta">
                   <span>
                     <strong>Due:</strong> {item.due_date}
