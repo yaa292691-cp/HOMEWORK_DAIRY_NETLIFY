@@ -864,7 +864,7 @@ function TeacherDashboard({ profile, onLogout }) {
 
     setSending(true);
 
-    const newHomework = {
+    const  const newHomework = {   teacher_id: profile.id,   recipient_institution_name: profile.institution_name,   recipient_class_name: profile.class_name,   recipient_section: profile.section,   recipient_group_name: profile.group_name || null,   subject: subject.trim(),   homework_text: homeworkText.trim(),   due_date: dueDate,   recipient_type: targetType,   recipient_student_id:     targetType === "student" ? targetStudentId : null, }; = {
       teacher_id: profile.id,
       institution_name: profile.institution_name,
       institution_type: profile.institution_type,
