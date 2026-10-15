@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import "./styles.css";
@@ -40,7 +39,7 @@ function App() {
     try {
       localStorage.setItem("homework-diary-theme", theme);
     } catch {
-      // The theme still works for this session if storage is unavailable.
+      // Theme still works for this session.
     }
   }, [theme]);
 
@@ -467,7 +466,6 @@ function RegisterPage({
         );
       }
 
-      // FIXED: the success message is one valid JavaScript string.
       if (authData.session) {
         setSuccess(
           "Your account and profile were created. If your dashboard does not open, log in using your new account."
@@ -862,20 +860,25 @@ function TeacherDashboard({ profile, onLogout }) {
       return;
     }
 
+    if (!subject.trim() || !homeworkText.trim() || !dueDate) {
+      setError("Please enter the subject, homework details, and due date.");
+      return;
+    }
+
     setSending(true);
 
-    const  const newHomework = {   teacher_id: profile.id,   recipient_institution_name: profile.institution_name,   recipient_class_name: profile.class_name,   recipient_section: profile.section,   recipient_group_name: profile.group_name || null,   subject: subject.trim(),   homework_text: homeworkText.trim(),   due_date: dueDate,   recipient_type: targetType,   recipient_student_id:     targetType === "student" ? targetStudentId : null, }; = {
+    // These field names match your existing Supabase homework table.
+    const newHomework = {
       teacher_id: profile.id,
-      institution_name: profile.institution_name,
-      institution_type: profile.institution_type,
-      class_name: profile.class_name,
-      section: profile.section,
-      group_name: profile.group_name || null,
+      recipient_institution_name: profile.institution_name,
+      recipient_class_name: profile.class_name,
+      recipient_section: profile.section,
+      recipient_group_name: profile.group_name || null,
       subject: subject.trim(),
-      homework: homeworkText.trim(),
+      homework_text: homeworkText.trim(),
       due_date: dueDate,
-      target_type: targetType,
-      target_student_id:
+      recipient_type: targetType,
+      recipient_student_id:
         targetType === "student" ? targetStudentId : null,
     };
 
@@ -1025,6 +1028,7 @@ function TeacherDashboard({ profile, onLogout }) {
                     </option>
                   ))}
                 </select>
+
                 {students.length === 0 && (
                   <small>No matching students were found.</small>
                 )}
@@ -1069,14 +1073,16 @@ function TeacherDashboard({ profile, onLogout }) {
                 <div className="homework-card-top">
                   <span className="subject-tag">{item.subject}</span>
                   <span className="status-pill status-blue">
-                    {item.target_type === "student"
+                    {item.recipient_type === "student"
                       ? "Specific student"
                       : "Whole class"}
                   </span>
                 </div>
 
                 <h3>{item.subject}</h3>
-                <p className="homework-description">{item.homework}</p>
+                <p className="homework-description">
+                  {item.homework_text}
+                </p>
 
                 <div className="homework-meta">
                   <span>
@@ -1084,8 +1090,8 @@ function TeacherDashboard({ profile, onLogout }) {
                   </span>
                   <span>
                     <strong>Sent to:</strong>{" "}
-                    {item.target_type === "student"
-                      ? getStudentName(item.target_student_id)
+                    {item.recipient_type === "student"
+                      ? getStudentName(item.recipient_student_id)
                       : "Entire Matching Class"}
                   </span>
                 </div>
@@ -1116,6 +1122,7 @@ function TeacherDashboard({ profile, onLogout }) {
               const item = homeworkList.find(
                 (homework) => homework.id === completion.homework_id
               );
+
               const student = students.find(
                 (entry) => entry.id === completion.student_id
               );
@@ -1132,7 +1139,9 @@ function TeacherDashboard({ profile, onLogout }) {
                   </div>
 
                   <h3>{item.subject}</h3>
-                  <p className="homework-description">{item.homework}</p>
+                  <p className="homework-description">
+                    {item.homework_text}
+                  </p>
 
                   <div className="completion-student">
                     {student?.photo_url ? (
@@ -1142,6 +1151,7 @@ function TeacherDashboard({ profile, onLogout }) {
                         {student?.full_name?.charAt(0) || "S"}
                       </span>
                     )}
+
                     <div>
                       <strong>{student?.full_name || "Student"}</strong>
                       <small>
@@ -1195,11 +1205,12 @@ function StudentDashboard({ profile, onLogout }) {
       return;
     }
 
+    // Use the actual recipient_* column names from Supabase.
     const matchingHomework = (allHomework || []).filter((item) => {
       if (
-        item.institution_name !== profile.institution_name ||
-        item.class_name !== profile.class_name ||
-        item.section !== profile.section
+        item.recipient_institution_name !== profile.institution_name ||
+        item.recipient_class_name !== profile.class_name ||
+        item.recipient_section !== profile.section
       ) {
         return false;
       }
@@ -1209,7 +1220,7 @@ function StudentDashboard({ profile, onLogout }) {
         profile.institution_type === "College"
       ) {
         if (
-          (item.group_name || "").trim().toLowerCase() !==
+          (item.recipient_group_name || "").trim().toLowerCase() !==
           (profile.group_name || "").trim().toLowerCase()
         ) {
           return false;
@@ -1217,8 +1228,8 @@ function StudentDashboard({ profile, onLogout }) {
       }
 
       if (
-        item.target_type === "student" &&
-        item.target_student_id !== profile.id
+        item.recipient_type === "student" &&
+        item.recipient_student_id !== profile.id
       ) {
         return false;
       }
@@ -1360,7 +1371,9 @@ function StudentDashboard({ profile, onLogout }) {
                 </div>
 
                 <h3>{item.subject}</h3>
-                <p className="homework-description">{item.homework}</p>
+                <p className="homework-description">
+                  {item.homework_text}
+                </p>
 
                 <div className="homework-meta">
                   <span>
@@ -1416,7 +1429,9 @@ function StudentDashboard({ profile, onLogout }) {
                 </div>
 
                 <h3>{item.subject}</h3>
-                <p className="homework-description">{item.homework}</p>
+                <p className="homework-description">
+                  {item.homework_text}
+                </p>
 
                 <div className="homework-meta">
                   <span>
