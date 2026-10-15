@@ -1,3029 +1,1445 @@
-﻿import React, {
-  useEffect,
-  useState,
-} from "react";
-
+import React, { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
+import "./styles.css";
 
-
-/* ============================================================
-   MAIN APP
-   ============================================================ */
+const emptyProfile = {
+  role: "Student",
+  full_name: "",
+  father_name: "",
+  email: "",
+  password: "",
+  age: "",
+  gender: "",
+  institution_type: "",
+  institution_name: "",
+  class_name: "",
+  section: "",
+  group_name: "",
+  roll_number: "",
+};
 
 function App() {
-  const [session, setSession] =
-    useState(null);
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [page, setPage] = useState("login");
+  const [authReady, setAuthReady] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  const [profile, setProfile] =
-    useState(null);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [page, setPage] =
-    useState("login");
-
-  const [email, setEmail] =
-    useState("");
-
-  const [password, setPassword] =
-    useState("");
-
-  const [message, setMessage] =
-    useState("");
-
-  const [error, setError] =
-    useState("");
-
-
-  /* ==========================================================
-     START APPLICATION
-     ========================================================== */
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem("homework-diary-theme") || "light";
+    } catch {
+      return "light";
+    }
+  });
 
   useEffect(() => {
-    loadSession();
+    try {
+      localStorage.setItem("homework-diary-theme", theme);
+    } catch {
+      // The theme still works for this session if storage is unavailable.
+    }
+  }, [theme]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function initialize() {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (!active) return;
+
+      if (error) {
+        setError(error.message);
+      }
+
+      setSession(data?.session || null);
+      setAuthReady(true);
+    }
+
+    initialize();
 
     const {
-      data: {
-        subscription,
-      },
-    } =
-      supabase.auth.onAuthStateChange(
-        async (
-          _event,
-          newSession
-        ) => {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (!active) return;
 
-          setSession(
-            newSession
-          );
+      setSession(newSession);
+      setAuthReady(true);
 
-          if (newSession) {
-            await loadProfile(
-              newSession.user.id
-            );
-          } else {
-            setProfile(null);
-          }
-
-          setLoading(false);
-        }
-      );
+      if (!newSession) {
+        setProfile(null);
+        setLoading(false);
+      }
+    });
 
     return () => {
+      active = false;
       subscription.unsubscribe();
     };
   }, []);
 
+  useEffect(() => {
+    if (!authReady) return;
 
-  /* ==========================================================
-     LOAD SESSION
-     ========================================================== */
-
-  async function loadSession() {
-    try {
-
-      const {
-        data: {
-          session:
-            currentSession,
-        },
-      } =
-        await supabase.auth.getSession();
-
-      setSession(
-        currentSession
-      );
-
-      if (currentSession) {
-
-        await loadProfile(
-          currentSession.user.id
-        );
-
-      }
-
-    } catch (err) {
-
-      console.error(err);
-
-      setError(
-        err.message
-      );
-
-    } finally {
-
+    if (!session?.user?.id) {
+      setProfile(null);
       setLoading(false);
-
+      return;
     }
-  }
 
+    let active = true;
 
-  /* ==========================================================
-     LOAD PROFILE
-     ========================================================== */
+    async function getProfile() {
+      setLoading(true);
+      setError("");
 
-  async function loadProfile(
-    userId
-  ) {
-
-    const {
-      data,
-      error:
-        profileError,
-    } =
-      await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .select("*")
-        .eq(
-          "id",
-          userId
-        )
-        .single();
+        .eq("id", session.user.id)
+        .maybeSingle();
 
-    if (profileError) {
+      if (!active) return;
 
-      console.error(
-        "Profile loading error:",
-        profileError
-      );
+      if (error) {
+        setError("Could not load your profile: " + error.message);
+        setProfile(null);
+      } else if (!data) {
+        setError(
+          "Your account exists, but its profile was not found. Please contact the administrator."
+        );
+        setProfile(null);
+      } else {
+        setProfile(data);
+      }
 
-      setProfile(null);
-
-      return;
+      setLoading(false);
     }
 
-    setProfile(data);
-  }
+    getProfile();
 
-
-  /* ==========================================================
-     LOGIN
-     ========================================================== */
-
-  async function login(event) {
-
-    event.preventDefault();
-
-    setError("");
-    setMessage("");
-
-    if (
-      !email ||
-      !password
-    ) {
-
-      setError(
-        "Please enter your email and password."
-      );
-
-      return;
-    }
-
-
-    const {
-      data,
-      error:
-        loginError,
-    } =
-      await supabase.auth
-        .signInWithPassword({
-          email,
-          password,
-        });
-
-
-    if (loginError) {
-
-      setError(
-        loginError.message
-      );
-
-      return;
-    }
-
-
-    setSession(
-      data.session
-    );
-
-    await loadProfile(
-      data.user.id
-    );
-  }
-
-
-  /* ==========================================================
-     LOGOUT
-     ========================================================== */
+    return () => {
+      active = false;
+    };
+  }, [session?.user?.id, authReady]);
 
   async function logout() {
-
-    await supabase.auth.signOut();
-
-    setSession(null);
-
-    setProfile(null);
-
-    setEmail("");
-
-    setPassword("");
-
-    setPage("login");
-
     setError("");
 
-    setMessage("");
-  }
+    const { error } = await supabase.auth.signOut();
 
-
-  /* ==========================================================
-     LOADING SCREEN
-     ========================================================== */
-
-  if (loading) {
-
-    return (
-      <div className="app">
-
-        <div className="card">
-
-          <h1>
-            HOMEWORK DIARY
-          </h1>
-
-          <p>
-            Loading...
-          </p>
-
-        </div>
-
-      </div>
-    );
-  }
-
-
-  /* ==========================================================
-     NOT LOGGED IN
-     ========================================================== */
-
-  if (!session) {
-
-    if (
-      page === "register"
-    ) {
-
-      return (
-        <RegisterPage
-          onBack={() => {
-
-            setPage("login");
-
-            setError("");
-
-            setMessage("");
-
-          }}
-        />
-      );
+    if (error) {
+      setError(error.message);
+      return;
     }
 
-
-    return (
-      <LoginPage
-        email={email}
-        password={password}
-        setEmail={setEmail}
-        setPassword={setPassword}
-        login={login}
-        onRegister={() => {
-
-          setPage(
-            "register"
-          );
-
-          setError("");
-
-          setMessage("");
-
-        }}
-        error={error}
-        message={message}
-      />
-    );
+    setSession(null);
+    setProfile(null);
+    setPage("login");
+    setSuccess("");
   }
 
-
-  /* ==========================================================
-     LOGGED IN BUT PROFILE NOT FOUND
-     ========================================================== */
-
-  if (!profile) {
-
-    return (
-      <div className="app">
-
-        <div className="card">
-
-          <h1>
-            HOMEWORK DIARY
-          </h1>
-
-          <p>
-            Your account is signed in,
-            but your profile record could
-            not be found.
-          </p>
-
-          <button
-            onClick={logout}
-          >
-            Logout
-          </button>
-
-        </div>
-
-      </div>
-    );
+  function changeTheme() {
+    setTheme((current) => (current === "light" ? "dark" : "light"));
   }
-
-
-  /* ==========================================================
-     TEACHER
-     ========================================================== */
-
-  if (
-    profile.role ===
-    "Teacher"
-  ) {
-
-    return (
-      <TeacherDashboard
-        profile={profile}
-        onLogout={logout}
-      />
-    );
-  }
-
-
-  /* ==========================================================
-     STUDENT
-     ========================================================== */
 
   return (
-    <StudentDashboard
-      profile={profile}
-      onLogout={logout}
-    />
+    <div className={`app-shell theme-${theme}`}>
+      <header className="topbar">
+        <a
+          className="brand"
+          href="#home"
+          onClick={(event) => event.preventDefault()}
+          aria-label="HOMEWORK DIARY home"
+        >
+          <span className="brand-mark">HD</span>
+          <span className="brand-copy">
+            <strong>HOMEWORK</strong>
+            <span>DIARY</span>
+          </span>
+        </a>
+
+        <div className="topbar-right">
+          <span className="theme-label">
+            {theme === "light" ? "Light mode" : "Dark mode"}
+          </span>
+
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={changeTheme}
+            aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+            title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+          >
+            <span aria-hidden="true">
+              {theme === "light" ? "☾" : "☀"}
+            </span>
+          </button>
+        </div>
+      </header>
+
+      <main className="page-content">
+        {loading ? (
+          <section className="panel loading-panel">
+            <div className="loading-spinner" />
+            <h2>Getting things ready</h2>
+            <p>Loading your HOMEWORK DIARY...</p>
+          </section>
+        ) : session && profile ? (
+          profile.role === "Teacher" ? (
+            <TeacherDashboard
+              profile={profile}
+              onLogout={logout}
+            />
+          ) : (
+            <StudentDashboard
+              profile={profile}
+              onLogout={logout}
+            />
+          )
+        ) : session && !profile ? (
+          <section className="panel message-panel">
+            <div className="section-icon">!</div>
+            <h2>Profile unavailable</h2>
+            <p className="error-message">
+              {error || "Your profile could not be loaded."}
+            </p>
+            <button className="button button-secondary" onClick={logout}>
+              Log Out
+            </button>
+          </section>
+        ) : page === "register" ? (
+          <RegisterPage
+            onBack={() => {
+              setPage("login");
+              setError("");
+              setSuccess("");
+            }}
+            error={error}
+            success={success}
+            setError={setError}
+            setSuccess={setSuccess}
+          />
+        ) : (
+          <LoginPage
+            onRegister={() => {
+              setPage("register");
+              setError("");
+              setSuccess("");
+            }}
+            error={error}
+            success={success}
+            setError={setError}
+            setSuccess={setSuccess}
+          />
+        )}
+      </main>
+
+      <footer className="site-footer">
+        <span>HOMEWORK DIARY</span>
+        <span>Learn • Organize • Achieve</span>
+      </footer>
+    </div>
   );
 }
 
-
-/* ============================================================
-   LOGIN PAGE
-   ============================================================ */
-
 function LoginPage({
-  email,
-  password,
-  setEmail,
-  setPassword,
-  login,
   onRegister,
   error,
-  message,
+  success,
+  setError,
+  setSuccess,
 }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleLogin(event) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    setSubmitting(true);
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+
+    if (error) setError(error.message);
+
+    setSubmitting(false);
+  }
 
   return (
-    <div className="app">
-
-      <div className="card login-card">
+    <section className="auth-layout">
+      <div className="welcome-panel">
+        <div className="welcome-badge">
+          <span className="welcome-dot" />
+          Your schoolwork, organized
+        </div>
 
         <h1>
-          HOMEWORK DIARY
+          Make every
+          <br />
+          school day <span>count.</span>
         </h1>
 
-        <h2>
-          Login
-        </h2>
-
-        <p className="subtitle">
-          Enter your email and password.
+        <p>
+          One simple place for teachers to share homework
+          and students to stay on track.
         </p>
 
-
-        {error && (
-          <div className="error">
-            {error}
+        <div className="welcome-features">
+          <div className="welcome-feature">
+            <span className="feature-icon">✓</span>
+            <span>Keep homework organized</span>
           </div>
-        )}
-
-
-        {message && (
-          <div className="success">
-            {message}
+          <div className="welcome-feature">
+            <span className="feature-icon">↗</span>
+            <span>Stay on top of due dates</span>
           </div>
-        )}
+          <div className="welcome-feature">
+            <span className="feature-icon">◎</span>
+            <span>Track finished assignments</span>
+          </div>
+        </div>
 
+        <div className="welcome-decoration decoration-one" />
+        <div className="welcome-decoration decoration-two" />
+      </div>
 
-        <form
-          onSubmit={login}
-        >
+      <div className="auth-card">
+        <div className="auth-card-heading">
+          <span className="eyebrow">WELCOME BACK</span>
+          <h2>Log in to your account</h2>
+          <p>Enter your details to continue.</p>
+        </div>
 
-          <label>
-            Email
+        {error && <div className="alert alert-error">{error}</div>}
+        {success && <div className="alert alert-success">{success}</div>}
+
+        <form onSubmit={handleLogin} className="form-stack">
+          <label className="field">
+            <span>Email address</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              required
+            />
           </label>
 
-          <input
-            type="email"
-            value={email}
-            onChange={(event) =>
-              setEmail(
-                event.target.value
-              )
-            }
-            placeholder="Enter your email"
-            autoComplete="email"
-          />
-
-
-          <label>
-            Password
+          <label className="field">
+            <span>Password</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Enter your password"
+              autoComplete="current-password"
+              required
+            />
           </label>
-
-          <input
-            type="password"
-            value={password}
-            onChange={(event) =>
-              setPassword(
-                event.target.value
-              )
-            }
-            placeholder="Enter your password"
-            autoComplete="current-password"
-          />
-
 
           <button
             type="submit"
+            className="button button-primary button-full"
+            disabled={submitting}
           >
-            Login
+            {submitting ? "Logging in..." : "Log In"}
+            {!submitting && <span aria-hidden="true">→</span>}
           </button>
-
         </form>
 
-
-        <div className="divider">
-          OR
+        <div className="auth-divider">
+          <span>NEW TO HOMEWORK DIARY?</span>
         </div>
 
-
         <button
-          className="secondary-button"
+          type="button"
+          className="button button-secondary button-full"
           onClick={onRegister}
         >
           Create New Account
         </button>
-
       </div>
-
-    </div>
+    </section>
   );
 }
-
-
-/* ============================================================
-   REGISTER PAGE
-   ============================================================ */
 
 function RegisterPage({
   onBack,
+  error,
+  success,
+  setError,
+  setSuccess,
 }) {
+  const [form, setForm] = useState({ ...emptyProfile });
+  const [photo, setPhoto] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const [role, setRole] =
-    useState("Student");
+  function updateField(event) {
+    const { name, value } = event.target;
+    setForm((previous) => ({ ...previous, [name]: value }));
+  }
 
-  const [fullName, setFullName] =
-    useState("");
-
-  const [fatherName, setFatherName] =
-    useState("");
-
-  const [email, setEmail] =
-    useState("");
-
-  const [password, setPassword] =
-    useState("");
-
-  const [age, setAge] =
-    useState("");
-
-  const [gender, setGender] =
-    useState("");
-
-  const [
-    institutionType,
-    setInstitutionType,
-  ] =
-    useState(
-      "Primary School"
-    );
-
-  const [
-    institutionName,
-    setInstitutionName,
-  ] =
-    useState("");
-
-  const [className, setClassName] =
-    useState("");
-
-  const [section, setSection] =
-    useState("");
-
-  const [groupName, setGroupName] =
-    useState("");
-
-  const [rollNumber, setRollNumber] =
-    useState("");
-
-  const [photo, setPhoto] =
-    useState(null);
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [message, setMessage] =
-    useState("");
-
-  const [error, setError] =
-    useState("");
-
-
-  const needsGroup =
-    institutionType ===
-      "High School" ||
-    institutionType ===
-      "College";
-
-
-  /* ==========================================================
-     REGISTER
-     ========================================================== */
-
-  async function register(event) {
-
+  async function handleRegister(event) {
     event.preventDefault();
-
     setError("");
-
-    setMessage("");
-
-
-    /* --------------------------------------------------------
-       VALIDATION
-       -------------------------------------------------------- */
-
-    if (
-      !fullName.trim()
-    ) {
-
-      setError(
-        "Please enter your full name."
-      );
-
-      return;
-    }
-
-
-    if (
-      role === "Student" &&
-      !fatherName.trim()
-    ) {
-
-      setError(
-        "Please enter your father name."
-      );
-
-      return;
-    }
-
-
-    if (
-      !email.trim()
-    ) {
-
-      setError(
-        "Please enter your email."
-      );
-
-      return;
-    }
-
-
-    if (
-      password.length < 6
-    ) {
-
-      setError(
-        "Password must contain at least 6 characters."
-      );
-
-      return;
-    }
-
-
-    if (
-      !institutionName.trim()
-    ) {
-
-      setError(
-        "Please enter your institution name."
-      );
-
-      return;
-    }
-
-
-    if (
-      !className.trim()
-    ) {
-
-      setError(
-        "Please enter your class."
-      );
-
-      return;
-    }
-
-
-    if (
-      !section.trim()
-    ) {
-
-      setError(
-        "Please enter your section."
-      );
-
-      return;
-    }
-
-
-    if (
-      needsGroup &&
-      !groupName.trim()
-    ) {
-
-      setError(
-        "Please enter your group."
-      );
-
-      return;
-    }
-
-
-    if (
-      role === "Student" &&
-      !rollNumber.trim()
-    ) {
-
-      setError(
-        "Please enter your roll number."
-      );
-
-      return;
-    }
-
-
-    setLoading(true);
-
+    setSuccess("");
+    setSubmitting(true);
 
     try {
+      const { data: authData, error: authError } =
+        await supabase.auth.signUp({
+          email: form.email.trim(),
+          password: form.password,
+        });
 
-      /* ------------------------------------------------------
-         CREATE AUTH ACCOUNT
-         ------------------------------------------------------ */
+      if (authError) throw authError;
 
-      const {
-        data,
-        error:
-          signUpError,
-      } =
-        await supabase.auth
-          .signUp({
-            email:
-              email.trim(),
-            password,
-          });
+      const user = authData.user;
 
-
-      if (signUpError) {
-        throw signUpError;
+      if (!user) {
+        throw new Error("Account could not be created. Please try again.");
       }
-
-
-      if (!data.user) {
-
-        throw new Error(
-          "Account could not be created."
-        );
-      }
-
-
-      /* ------------------------------------------------------
-         UPLOAD PHOTO
-         ------------------------------------------------------ */
 
       let photoUrl = null;
 
-
       if (photo) {
+        const extension = photo.name.split(".").pop() || "jpg";
+        const filePath = `${user.id}/profile-${Date.now()}.${extension}`;
 
-        const fileExtension =
-          photo.name
-            .split(".")
-            .pop() ||
-          "jpg";
-
-
-        const filePath =
-          `${data.user.id}/profile.${fileExtension}`;
-
-
-        const {
-          error:
-            uploadError,
-        } =
-          await supabase
-            .storage
-            .from(
-              "profile-photos"
-            )
-            .upload(
-              filePath,
-              photo,
-              {
-                upsert: true,
-                contentType:
-                  photo.type,
-              }
-            );
-
+        const { error: uploadError } = await supabase.storage
+          .from("profile-photos")
+          .upload(filePath, photo, {
+            upsert: true,
+            contentType: photo.type || "image/jpeg",
+          });
 
         if (uploadError) {
-          throw uploadError;
+          throw new Error(
+            "Account created, but photo upload failed: " +
+              uploadError.message
+          );
         }
 
+        const { data: photoData } = supabase.storage
+          .from("profile-photos")
+          .getPublicUrl(filePath);
 
-        const {
-          data:
-            publicData,
-        } =
-          supabase.storage
-            .from(
-              "profile-photos"
-            )
-            .getPublicUrl(
-              filePath
-            );
-
-
-        photoUrl =
-          publicData.publicUrl;
+        photoUrl = photoData.publicUrl;
       }
-
-
-      /* ------------------------------------------------------
-         CREATE PROFILE
-         ------------------------------------------------------ */
 
       const profileData = {
-
-        /* VERY IMPORTANT:
-           This MUST be the same ID as Auth user.
-        */
-
-        id:
-          data.user.id,
-
-
-        full_name:
-          fullName.trim(),
-
-
+        id: user.id,
+        role: form.role,
+        full_name: form.full_name.trim(),
         father_name:
-          role === "Student"
-            ? fatherName.trim()
-            : null,
-
-
-        email:
-          email.trim(),
-
-
-        age:
-          age
-            ? Number(age)
-            : null,
-
-
-        gender:
-          gender || null,
-
-
-        role,
-
-
-        institution_type:
-          institutionType,
-
-
-        institution_name:
-          institutionName.trim(),
-
-
-        class_name:
-          className.trim(),
-
-
-        section:
-          section.trim(),
-
-
-        group_name:
-          needsGroup
-            ? groupName.trim()
-            : null,
-
-
+          form.role === "Student" ? form.father_name.trim() : null,
+        email: form.email.trim(),
+        age: form.age ? Number(form.age) : null,
+        gender: form.gender || null,
+        institution_type: form.institution_type,
+        institution_name: form.institution_name.trim(),
+        class_name: form.class_name.trim(),
+        section: form.section.trim(),
+        group_name: form.group_name.trim() || null,
         roll_number:
-          role === "Student"
-            ? rollNumber.trim()
+          form.role === "Student"
+            ? form.roll_number.trim() || null
             : null,
-
-
-        photo_url:
-          photoUrl,
+        photo_url: photoUrl,
       };
 
-
-      const {
-        error:
-          profileError,
-      } =
-        await supabase
-          .from("profiles")
-          .insert(
-            profileData
-          );
-
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .insert(profileData);
 
       if (profileError) {
-        throw profileError;
+        throw new Error(
+          "Account was created, but saving its profile failed: " +
+            profileError.message
+        );
       }
 
+      if (authData.session) {
+        setSuccess(
+          "Your account and profile were created. If your dashboard does not open, log in using your new 
 
-      /* ------------------------------------------------------
-         SUCCESS
-         ------------------------------------------------------ */
-
-      setMessage(
-        "Account created successfully. Please check your email if email confirmation is enabled, then log in."
-      );
-
-      setLoading(false);
-
+account."
+        );
+      } else {
+        setSuccess(
+          "Your account was created. Check your email if confirmation is required, then log in."
+        );
+      }
     } catch (err) {
-
-      console.error(
-        "Registration error:",
-        err
-      );
-
-      setError(
-        err.message ||
-          "Registration failed."
-      );
-
-      setLoading(false);
+      setError(err.message || "Registration failed.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
-
-  /* ==========================================================
-     REGISTER UI
-     ========================================================== */
-
   return (
-    <div className="app">
+    <section className="register-layout">
+      <div className="register-heading">
+        <span className="eyebrow">GET STARTED</span>
+        <h1>Create your account</h1>
+        <p>Join HOMEWORK DIARY and keep schoolwork organized.</p>
+      </div>
 
-      <div className="card register-card">
+      <div className="auth-card register-card">
+        {error && <div className="alert alert-error">{error}</div>}
+        {success && <div className="alert alert-success">{success}</div>}
 
-        <h1>
-          HOMEWORK DIARY
-        </h1>
+        <form onSubmit={handleRegister} className="form-stack">
+          <div className="form-grid">
+            <label className="field">
+              <span>Account type</span>
+              <select
+                name="role"
+                value={form.role}
+                onChange={updateField}
+                required
+              >
+                <option value="Student">Student</option>
+                <option value="Teacher">Teacher</option>
+              </select>
+            </label>
 
-        <h2>
-          Create New Account
-        </h2>
+            <label className="field">
+              <span>Full name</span>
+              <input
+                name="full_name"
+                value={form.full_name}
+                onChange={updateField}
+                placeholder="Enter full name"
+                required
+              />
+            </label>
 
+            {form.role === "Student" && (
+              <label className="field">
+                <span>Father name</span>
+                <input
+                  name="father_name"
+                  value={form.father_name}
+                  onChange={updateField}
+                  placeholder="Enter father name"
+                  required
+                />
+              </label>
+            )}
 
-        {error && (
-          <div className="error">
-            {error}
+            <label className="field">
+              <span>Email address</span>
+              <input
+                type="email"
+                name="email"
+                value={form.email}
+                onChange={updateField}
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+              />
+            </label>
+
+            <label className="field">
+              <span>Password</span>
+              <input
+                type="password"
+                name="password"
+                value={form.password}
+                onChange={updateField}
+                placeholder="At least 6 characters"
+                minLength={6}
+                autoComplete="new-password"
+                required
+              />
+            </label>
+
+            <label className="field">
+              <span>Age</span>
+              <input
+                type="number"
+                name="age"
+                value={form.age}
+                onChange={updateField}
+                min="1"
+                max="120"
+                placeholder="Your age"
+              />
+            </label>
+
+            <label className="field">
+              <span>Gender</span>
+              <select
+                name="gender"
+                value={form.gender}
+                onChange={updateField}
+              >
+                <option value="">Select gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </label>
+
+            <label className="field">
+              <span>Institution type</span>
+              <select
+                name="institution_type"
+                value={form.institution_type}
+                onChange={updateField}
+                required
+              >
+                <option value="">Select institution type</option>
+                <option value="Primary School">Primary School</option>
+                <option value="Secondary School">Secondary School</option>
+                <option value="High School">High School</option>
+                <option value="College">College</option>
+              </select>
+            </label>
+
+            <label className="field field-wide">
+              <span>Institution name</span>
+              <input
+                name="institution_name"
+                value={form.institution_name}
+                onChange={updateField}
+                placeholder="Enter school or college name"
+                required
+              />
+            </label>
+
+            <label className="field">
+              <span>Class</span>
+              <input
+                name="class_name"
+                value={form.class_name}
+                onChange={updateField}
+                placeholder="Enter class"
+                required
+              />
+            </label>
+
+            <label className="field">
+              <span>Section</span>
+              <input
+                name="section"
+                value={form.section}
+                onChange={updateField}
+                placeholder="Enter section"
+                required
+              />
+            </label>
+
+            {(form.institution_type === "High School" ||
+              form.institution_type === "College") && (
+              <label className="field">
+                <span>Group</span>
+                <input
+                  name="group_name"
+                  value={form.group_name}
+                  onChange={updateField}
+                  placeholder="For example, CS"
+                />
+              </label>
+            )}
+
+            {form.role === "Student" && (
+              <label className="field">
+                <span>Roll number</span>
+                <input
+                  name="roll_number"
+                  value={form.roll_number}
+                  onChange={updateField}
+                  placeholder="Enter roll number"
+                  required
+                />
+              </label>
+            )}
+
+            <label className="field field-wide">
+              <span>Profile photo</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(event) =>
+                  setPhoto(event.target.files?.[0] || null)
+                }
+              />
+              <small>Choose a clear image for your profile.</small>
+            </label>
           </div>
-        )}
-
-
-        {message && (
-          <div className="success">
-            {message}
-          </div>
-        )}
-
-
-        <form
-          onSubmit={register}
-        >
-
-          {/* ROLE */}
-
-          <label>
-            Role
-          </label>
-
-          <select
-            value={role}
-            onChange={(event) =>
-              setRole(
-                event.target.value
-              )
-            }
-          >
-
-            <option value="Student">
-              Student
-            </option>
-
-            <option value="Teacher">
-              Teacher
-            </option>
-
-          </select>
-
-
-          {/* FULL NAME */}
-
-          <label>
-            Full Name
-          </label>
-
-          <input
-            value={fullName}
-            onChange={(event) =>
-              setFullName(
-                event.target.value
-              )
-            }
-            placeholder="Full name"
-          />
-
-
-          {/* FATHER NAME */}
-
-          {role ===
-            "Student" && (
-            <>
-              <label>
-                Father Name
-              </label>
-
-              <input
-                value={fatherName}
-                onChange={(event) =>
-                  setFatherName(
-                    event.target.value
-                  )
-                }
-                placeholder="Father name"
-              />
-            </>
-          )}
-
-
-          {/* EMAIL */}
-
-          <label>
-            Email
-          </label>
-
-          <input
-            type="email"
-            value={email}
-            onChange={(event) =>
-              setEmail(
-                event.target.value
-              )
-            }
-            placeholder="Email address"
-          />
-
-
-          {/* PASSWORD */}
-
-          <label>
-            Password
-          </label>
-
-          <input
-            type="password"
-            value={password}
-            onChange={(event) =>
-              setPassword(
-                event.target.value
-              )
-            }
-            placeholder="At least 6 characters"
-          />
-
-
-          {/* AGE */}
-
-          <label>
-            Age
-          </label>
-
-          <input
-            type="number"
-            min="1"
-            max="120"
-            value={age}
-            onChange={(event) =>
-              setAge(
-                event.target.value
-              )
-            }
-            placeholder="Age"
-          />
-
-
-          {/* GENDER */}
-
-          <label>
-            Gender
-          </label>
-
-          <select
-            value={gender}
-            onChange={(event) =>
-              setGender(
-                event.target.value
-              )
-            }
-          >
-
-            <option value="">
-              Select gender
-            </option>
-
-            <option value="Male">
-              Male
-            </option>
-
-            <option value="Female">
-              Female
-            </option>
-
-            <option value="Other">
-              Other
-            </option>
-
-          </select>
-
-
-          {/* INSTITUTION TYPE */}
-
-          <label>
-            Institution Type
-          </label>
-
-          <select
-            value={
-              institutionType
-            }
-            onChange={(event) =>
-              setInstitutionType(
-                event.target.value
-              )
-            }
-          >
-
-            <option value="Primary School">
-              Primary School
-            </option>
-
-            <option value="Secondary School">
-              Secondary School
-            </option>
-
-            <option value="High School">
-              High School
-            </option>
-
-            <option value="College">
-              College
-            </option>
-
-          </select>
-
-
-          {/* INSTITUTION */}
-
-          <label>
-            Institution Name
-          </label>
-
-          <input
-            value={
-              institutionName
-            }
-            onChange={(event) =>
-              setInstitutionName(
-                event.target.value
-              )
-            }
-            placeholder="School or college name"
-          />
-
-
-          {/* CLASS */}
-
-          <label>
-            Class
-          </label>
-
-          <input
-            value={className}
-            onChange={(event) =>
-              setClassName(
-                event.target.value
-              )
-            }
-            placeholder="Class"
-          />
-
-
-          {/* SECTION */}
-
-          <label>
-            Section
-          </label>
-
-          <input
-            value={section}
-            onChange={(event) =>
-              setSection(
-                event.target.value
-              )
-            }
-            placeholder="Section"
-          />
-
-
-          {/* GROUP */}
-
-          {needsGroup && (
-            <>
-              <label>
-                Group
-              </label>
-
-              <input
-                value={groupName}
-                onChange={(event) =>
-                  setGroupName(
-                    event.target.value
-                  )
-                }
-                placeholder="Group"
-              />
-            </>
-          )}
-
-
-          {/* ROLL NUMBER */}
-
-          {role ===
-            "Student" && (
-            <>
-              <label>
-                Roll Number
-              </label>
-
-              <input
-                value={
-                  rollNumber
-                }
-                onChange={(event) =>
-                  setRollNumber(
-                    event.target.value
-                  )
-                }
-                placeholder="Roll number"
-              />
-            </>
-          )}
-
-
-          {/* PHOTO */}
-
-          <label>
-            Profile Photo
-          </label>
-
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(event) =>
-              setPhoto(
-                event.target.files?.[0] ||
-                  null
-              )
-            }
-          />
-
-
-          {/* CREATE ACCOUNT */}
 
           <button
             type="submit"
-            disabled={loading}
+            className="button button-primary button-full"
+            disabled={submitting}
           >
-
-            {loading
-              ? "Creating Account..."
-              : "Create Account"}
-
+            {submitting ? "Creating account..." : "Create Account"}
+            {!submitting && <span aria-hidden="true">→</span>}
           </button>
-
         </form>
 
-
         <button
-          className="secondary-button"
+          type="button"
+          className="button button-ghost button-full"
           onClick={onBack}
         >
-          Back to Login
+          ← Back to Login
         </button>
-
       </div>
-
-    </div>
+    </section>
   );
 }
 
-
-/* ============================================================
-   PROFILE CARD
-   ============================================================ */
-
-function ProfileCard({
-  profile,
-}) {
+function ProfileCard({ profile, onLogout }) {
+  const isStudent = profile.role === "Student";
 
   return (
-    <div className="profile-card">
-
-      <div className="profile-photo-container">
-
+    <section className="profile-banner">
+      <div className="profile-main">
         {profile.photo_url ? (
-
           <img
-            src={
-              profile.photo_url
-            }
-            alt="Profile"
             className="profile-photo"
+            src={profile.photo_url}
+            alt={`${profile.full_name}'s profile`}
           />
-
         ) : (
-
-          <div className="profile-placeholder">
-            No Photo
+          <div className="profile-photo profile-placeholder">
+            {profile.full_name?.charAt(0)?.toUpperCase() || "?"}
           </div>
-
         )}
 
+        <div className="profile-identity">
+          <span className="eyebrow">
+            {isStudent ? "STUDENT PROFILE" : "TEACHER PROFILE"}
+          </span>
+          <h2>{profile.full_name}</h2>
+          <p>{profile.institution_name}</p>
+        </div>
       </div>
 
-
-      <div className="profile-information">
-
-        <h3>
-          Profile
-        </h3>
-
-
-        <p>
-          <strong>
-            Full Name:
-          </strong>{" "}
-          {profile.full_name}
-        </p>
-
-
-        {profile.father_name && (
-          <p>
-            <strong>
-              Father Name:
-            </strong>{" "}
-            {profile.father_name}
-          </p>
+      <div className="profile-details">
+        {isStudent && (
+          <div className="profile-detail">
+            <span>Father name</span>
+            <strong>{profile.father_name || "—"}</strong>
+          </div>
         )}
 
+        <div className="profile-detail">
+          <span>Class</span>
+          <strong>{profile.class_name || "—"}</strong>
+        </div>
 
-        <p>
-          <strong>
-            Email:
-          </strong>{" "}
-          {profile.email}
-        </p>
+        <div className="profile-detail">
+          <span>Section</span>
+          <strong>{profile.section || "—"}</strong>
+        </div>
 
-
-        {profile.age && (
-          <p>
-            <strong>
-              Age:
-            </strong>{" "}
-            {profile.age}
-          </p>
+        {isStudent && (
+          <div className="profile-detail">
+            <span>Roll number</span>
+            <strong>{profile.roll_number || "—"}</strong>
+          </div>
         )}
-
-
-        {profile.gender && (
-          <p>
-            <strong>
-              Gender:
-            </strong>{" "}
-            {profile.gender}
-          </p>
-        )}
-
-
-        <p>
-          <strong>
-            Role:
-          </strong>{" "}
-          {profile.role}
-        </p>
-
-
-        <p>
-          <strong>
-            Institution:
-          </strong>{" "}
-          {profile.institution_name}
-        </p>
-
-
-        <p>
-          <strong>
-            Institution Type:
-          </strong>{" "}
-          {profile.institution_type}
-        </p>
-
-
-        <p>
-          <strong>
-            Class:
-          </strong>{" "}
-          {profile.class_name}
-        </p>
-
-
-        <p>
-          <strong>
-            Section:
-          </strong>{" "}
-          {profile.section}
-        </p>
-
-
-        {profile.group_name && (
-          <p>
-            <strong>
-              Group:
-            </strong>{" "}
-            {profile.group_name}
-          </p>
-        )}
-
-
-        {profile.roll_number && (
-          <p>
-            <strong>
-              Roll Number:
-            </strong>{" "}
-            {profile.roll_number}
-          </p>
-        )}
-
       </div>
 
-    </div>
+      <button
+        className="button button-secondary logout-button"
+        onClick={onLogout}
+      >
+        Log Out
+      </button>
+    </section>
   );
 }
 
-
-/* ============================================================
-   TEACHER DASHBOARD
-   ============================================================ */
-
-function TeacherDashboard({
-  profile,
-  onLogout,
-}) {
-
-  const [subject, setSubject] =
-    useState("");
-
-  const [homeworkText, setHomeworkText] =
-    useState("");
-
-  const [dueDate, setDueDate] =
-    useState("");
-
-  const [recipientType, setRecipientType] =
-    useState("class");
-
-  const [students, setStudents] =
-    useState([]);
-
-  const [selectedStudent, setSelectedStudent] =
-    useState("");
-
-  const [homeworkList, setHomeworkList] =
-    useState([]);
-
-  const [completionList, setCompletionList] =
-    useState([]);
-
-  const [studentProfiles, setStudentProfiles] =
-    useState([]);
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [message, setMessage] =
-    useState("");
-
-  const [error, setError] =
-    useState("");
-
-
-  /* ==========================================================
-     LOAD TEACHER DATA
-     ========================================================== */
+function TeacherDashboard({ profile, onLogout }) {
+  const [students, setStudents] = useState([]);
+  const [homeworkList, setHomeworkList] = useState([]);
+  const [completions, setCompletions] = useState([]);
+  const [subject, setSubject] = useState("");
+  const [homeworkText, setHomeworkText] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [targetType, setTargetType] = useState("class");
+  const [targetStudentId, setTargetStudentId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   useEffect(() => {
-
-    loadStudents();
-
-    loadTeacherHomework();
-
-  }, []);
-
-
-  /* ==========================================================
-     LOAD MATCHING STUDENTS
-     ========================================================== */
-
-  async function loadStudents() {
-
-    const {
-      data,
-      error:
-        studentsError,
-    } =
-      await supabase
-        .from("profiles")
-        .select("*")
-        .eq(
-          "role",
-          "Student"
-        )
-        .eq(
-          "institution_name",
-          profile.institution_name
-        )
-        .eq(
-          "class_name",
-          profile.class_name
-        )
-        .eq(
-          "section",
-          profile.section
-        );
-
-
-    if (studentsError) {
-
-      console.error(
-        "Student loading error:",
-        studentsError
-      );
-
-      setError(
-        "Could not load students: " +
-          studentsError.message
-      );
-
-      return;
-    }
-
-
-    const matchingStudents =
-      (data || []).filter(
-        (student) => {
-
-          return (
-            student.group_name ===
-            profile.group_name
-          );
-
-        }
-      );
-
-
-    setStudents(
-      matchingStudents
-    );
-  }
-
-
-  /* ==========================================================
-     LOAD TEACHER HOMEWORK
-     ========================================================== */
-
-  async function loadTeacherHomework() {
-
-    const {
-      data,
-      error:
-        homeworkError,
-    } =
-      await supabase
-        .from("homework")
-        .select("*")
-        .eq(
-          "teacher_id",
-          profile.id
-        )
-        .order(
-          "created_at",
-          {
-            ascending: false,
-          }
-        );
-
-
-    if (homeworkError) {
-
-      console.error(
-        "Homework loading error:",
-        homeworkError
-      );
-
-      setError(
-        "Could not load homework: " +
-          homeworkError.message
-      );
-
-      return;
-    }
-
-
-    const homeworkData =
-      data || [];
-
-
-    setHomeworkList(
-      homeworkData
-    );
-
-
-    await loadCompletions(
-      homeworkData
-    );
-  }
-
-
-  /* ==========================================================
-     LOAD COMPLETED HOMEWORK
-     ========================================================== */
-
-  async function loadCompletions(
-    teacherHomework
-  ) {
-
-    if (
-      !teacherHomework ||
-      teacherHomework.length === 0
-    ) {
-
-      setCompletionList([]);
-
-      setStudentProfiles([]);
-
-      return;
-    }
-
-
-    const homeworkIds =
-      teacherHomework.map(
-        (item) =>
-          item.id
-      );
-
-
-    const {
-      data:
-        completionData,
-      error:
-        completionError,
-    } =
-      await supabase
-        .from(
-          "homework_completions"
-        )
-        .select("*")
-        .in(
-          "homework_id",
-          homeworkIds
-        )
-        .order(
-          "id",
-          {
-            ascending: false,
-          }
-        );
-
-
-    if (completionError) {
-
-      console.error(
-        "Completion loading error:",
-        completionError
-      );
-
-      setError(
-        "Could not load finished homework: " +
-          completionError.message
-      );
-
-      return;
-    }
-
-
-    const completions =
-      completionData || [];
-
-
-    setCompletionList(
-      completions
-    );
-
-
-    const studentIds = [
-      ...new Set(
-        completions
-          .map(
-            (item) =>
-              item.student_id
-          )
-          .filter(Boolean)
-      ),
-    ];
-
-
-    if (
-      studentIds.length ===
-      0
-    ) {
-
-      setStudentProfiles([]);
-
-      return;
-    }
-
-
-    const {
-      data:
-        profileData,
-      error:
-        profileError,
-    } =
-      await supabase
-        .from("profiles")
-        .select(
-          `
-            id,
-            full_name,
-            roll_number,
-            institution_name,
-            class_name,
-            section,
-            group_name
-          `
-        )
-        .in(
-          "id",
-          studentIds
-        );
-
-
-    if (profileError) {
-
-      console.error(
-        "Student profile loading error:",
-        profileError
-      );
-
-      setError(
-        "Could not load student information: " +
-          profileError.message
-      );
-
-      return;
-    }
-
-
-    setStudentProfiles(
-      profileData || []
-    );
-  }
-
-
-  /* ==========================================================
-     SEND HOMEWORK
-     ========================================================== */
-
-  async function sendHomework(
-    event
-  ) {
-
-    event.preventDefault();
-
+    loadTeacherData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.id]);
+
+  async function loadTeacherData() {
+    setLoading(true);
     setError("");
 
-    setMessage("");
+    const { data: studentData, error: studentError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("role", "Student")
+      .eq("institution_name", profile.institution_name)
+      .eq("class_name", profile.class_name)
+      .eq("section", profile.section);
 
-
-    if (
-      !subject.trim()
-    ) {
-
-      setError(
-        "Enter the subject."
-      );
-
+    if (studentError) {
+      setError("Could not load students: " + studentError.message);
+      setLoading(false);
       return;
     }
 
+    const matchingStudents = (studentData || []).filter((student) => {
+      if (
+        profile.institution_type === "High School" ||
+        profile.institution_type === "College"
+      ) {
+        return (
+          (student.group_name || "").trim().toLowerCase() ===
+          (profile.group_name || "").trim().toLowerCase()
+        );
+      }
 
-    if (
-      !homeworkText.trim()
-    ) {
+      return true;
+    });
 
-      setError(
-        "Enter the homework."
-      );
+    setStudents(matchingStudents);
 
+    const { data: homeworkData, error: homeworkError } = await supabase
+      .from("homework")
+      .select("*")
+      .eq("teacher_id", profile.id)
+      .order("created_at", { ascending: false });
+
+    if (homeworkError) {
+      setError("Could not load homework: " + homeworkError.message);
+      setLoading(false);
       return;
     }
 
+    setHomeworkList(homeworkData || []);
 
-    if (
-      recipientType ===
-        "student" &&
-      !selectedStudent
-    ) {
+    const homeworkIds = (homeworkData || []).map((item) => item.id);
 
-      setError(
-        "Select a student."
-      );
+    if (homeworkIds.length) {
+      const { data: completionData, error: completionError } =
+        await supabase
+          .from("homework_completions")
+          .select("*")
+          .in("homework_id", homeworkIds);
 
+      if (completionError) {
+        setError(
+          "Could not load finished homework: " + completionError.message
+        );
+      } else {
+        setCompletions(completionData || []);
+      }
+    } else {
+      setCompletions([]);
+    }
+
+    setLoading(false);
+  }
+
+  async function sendHomework(event) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (targetType === "student" && !targetStudentId) {
+      setError("Please select a student.");
       return;
     }
 
+    setSending(true);
 
-    const selectedProfile =
-      students.find(
-        (student) =>
-          student.id ===
-          selectedStudent
-      );
-
-
-    if (
-      recipientType ===
-        "student" &&
-      !selectedProfile
-    ) {
-
-      setError(
-        "The selected student is not available."
-      );
-
-      return;
-    }
-
-
-    setLoading(true);
-
-
-    const homeworkData = {
-
-      teacher_id:
-        profile.id,
-
-      subject:
-        subject.trim(),
-
-      homework_text:
-        homeworkText.trim(),
-
-      due_date:
-        dueDate || null,
-
-      recipient_type:
-        recipientType,
-
-      recipient_student_id:
-        recipientType ===
-        "student"
-          ? selectedStudent
-          : null,
-
-      recipient_institution_name:
-        profile.institution_name,
-
-      recipient_class_name:
-        profile.class_name,
-
-      recipient_section:
-        profile.section,
-
-      recipient_group_name:
-        recipientType ===
-        "student"
-          ? selectedProfile
-              ?.group_name ||
-            null
-          : profile.group_name ||
-            null,
+    const newHomework = {
+      teacher_id: profile.id,
+      institution_name: profile.institution_name,
+      institution_type: profile.institution_type,
+      class_name: profile.class_name,
+      section: profile.section,
+      group_name: profile.group_name || null,
+      subject: subject.trim(),
+      homework: homeworkText.trim(),
+      due_date: dueDate,
+      target_type: targetType,
+      target_student_id:
+        targetType === "student" ? targetStudentId : null,
     };
 
-
-    const {
-      error:
-        insertError,
-    } =
-      await supabase
-        .from("homework")
-        .insert(
-          homeworkData
-        );
-
+    const { error: insertError } = await supabase
+      .from("homework")
+      .insert(newHomework);
 
     if (insertError) {
-
-      console.error(
-        "Homework insert error:",
-        insertError
-      );
-
-      setLoading(false);
-
-      setError(
-        insertError.message
-      );
-
-      return;
+      setError("Could not send homework: " + insertError.message);
+    } else {
+      setSuccess("Homework sent successfully!");
+      setSubject("");
+      setHomeworkText("");
+      setDueDate("");
+      setTargetType("class");
+      setTargetStudentId("");
+      await loadTeacherData();
     }
 
-
-    setSubject("");
-
-    setHomeworkText("");
-
-    setDueDate("");
-
-    setSelectedStudent("");
-
-
-    setMessage(
-      "Homework sent successfully."
-    );
-
-
-    setLoading(false);
-
-
-    await loadTeacherHomework();
+    setSending(false);
   }
 
-
-  /* ==========================================================
-     FIND STUDENT
-     ========================================================== */
-
-  function getStudentForCompletion(
-    completion
-  ) {
-
-    return studentProfiles.find(
-      (student) =>
-        student.id ===
-        completion.student_id
+  function getStudentName(studentId) {
+    return (
+      students.find((student) => student.id === studentId)?.full_name ||
+      "Student"
     );
   }
 
-
-  /* ==========================================================
-     FIND HOMEWORK
-     ========================================================== */
-
-  function getHomeworkForCompletion(
-    completion
-  ) {
-
-    return homeworkList.find(
-      (homework) =>
-        homework.id ===
-        completion.homework_id
-    );
-  }
-
-
-  /* ==========================================================
-     TEACHER UI
-     ========================================================== */
+  const finishedCount = completions.length;
 
   return (
-    <div className="app">
+    <div className="dashboard">
+      <ProfileCard profile={profile} onLogout={onLogout} />
 
-      <div className="dashboard">
+      <div className="dashboard-heading">
+        <div>
+          <span className="eyebrow">YOUR WORKSPACE</span>
+          <h1>Teacher Dashboard</h1>
+          <p>Share assignments and follow student progress.</p>
+        </div>
+      </div>
 
-
-        {/* ==================================================
-            TOP BAR
-            ================================================== */}
-
-        <div className="topbar">
-
-          <h1>
-            TEACHER HOMEWORK DIARY
-          </h1>
-
-          <button
-            onClick={onLogout}
-          >
-            Logout
-          </button>
-
+      <div className="stats-grid">
+        <div className="stat-card">
+          <span className="stat-icon stat-blue">▤</span>
+          <div>
+            <span className="stat-label">Homework sent</span>
+            <strong>{homeworkList.length}</strong>
+          </div>
         </div>
 
+        <div className="stat-card">
+          <span className="stat-icon stat-green">✓</span>
+          <div>
+            <span className="stat-label">Finished entries</span>
+            <strong>{finishedCount}</strong>
+          </div>
+        </div>
 
-        {/* ==================================================
-            PROFILE
-            ================================================== */}
+        <div className="stat-card">
+          <span className="stat-icon stat-violet">♙</span>
+          <div>
+            <span className="stat-label">Matching students</span>
+            <strong>{students.length}</strong>
+          </div>
+        </div>
+      </div>
 
-        <ProfileCard
-          profile={profile}
-        />
+      <section className="panel">
+        <div className="section-heading">
+          <div className="section-icon">＋</div>
+          <div>
+            <h2>Send Homework</h2>
+            <p>Create an assignment for your class or one student.</p>
+          </div>
+        </div>
 
+        {error && <div className="alert alert-error">{error}</div>}
+        {success && <div className="alert alert-success">{success}</div>}
 
-        {/* ==================================================
-            SEND HOMEWORK
-            ================================================== */}
-
-        <div className="dashboard-card">
-
-          <h2>
-            Send Homework
-          </h2>
-
-
-          {error && (
-            <div className="error">
-              {error}
-            </div>
-          )}
-
-
-          {message && (
-            <div className="success">
-              {message}
-            </div>
-          )}
-
-
-          <form
-            onSubmit={
-              sendHomework
-            }
-          >
-
-
-            {/* SUBJECT */}
-
-            <label>
-              Subject
+        <form onSubmit={sendHomework} className="form-stack">
+          <div className="form-grid">
+            <label className="field">
+              <span>Subject</span>
+              <input
+                value={subject}
+                onChange={(event) => setSubject(event.target.value)}
+                placeholder="e.g. Mathematics"
+                required
+              />
             </label>
 
-            <input
-              value={subject}
-              onChange={(event) =>
-                setSubject(
-                  event.target.value
-                )
-              }
-              placeholder="Subject name"
-            />
-
-
-            {/* HOMEWORK */}
-
-            <label>
-              Homework
+            <label className="field">
+              <span>Due date</span>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(event) => setDueDate(event.target.value)}
+                min={new Date().toLocaleDateString("en-CA")}
+                required
+              />
             </label>
 
-            <textarea
-              value={
-                homeworkText
-              }
-              onChange={(event) =>
-                setHomeworkText(
-                  event.target.value
-                )
-              }
-              placeholder="Write homework here..."
-              rows="6"
-            />
-
-
-            {/* DUE DATE */}
-
-            <label>
-              Due Date
+            <label className="field field-wide">
+              <span>Homework instructions</span>
+              <textarea
+                value={homeworkText}
+                onChange={(event) => setHomeworkText(event.target.value)}
+                placeholder="Write the homework details..."
+                rows={4}
+                required
+              />
             </label>
 
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(event) =>
-                setDueDate(
-                  event.target.value
-                )
-              }
-            />
-
-
-            {/* SEND TO */}
-
-            <label>
-              Send To
+            <label className="field">
+              <span>Send to</span>
+              <select
+                value={targetType}
+                onChange={(event) => {
+                  setTargetType(event.target.value);
+                  setTargetStudentId("");
+                }}
+              >
+                <option value="class">Entire Matching Class</option>
+                <option value="student">Specific Student</option>
+              </select>
             </label>
 
-            <select
-              value={
-                recipientType
-              }
-              onChange={(event) =>
-                setRecipientType(
-                  event.target.value
-                )
-              }
-            >
-
-              <option value="class">
-                Entire Matching Class
-              </option>
-
-              <option value="student">
-                Specific Student
-              </option>
-
-            </select>
-
-
-            {/* SPECIFIC STUDENT */}
-
-            {recipientType ===
-              "student" && (
-              <>
-
-                <label>
-                  Select Student
-                </label>
-
-
-                {students.length ===
-                0 ? (
-
-                  <p>
-                    No matching students found.
-                  </p>
-
-                ) : (
-
-                  <select
-                    value={
-                      selectedStudent
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setSelectedStudent(
-                        event.target.value
-                      )
-                    }
-                  >
-
-                    <option value="">
-                      Select student
+            {targetType === "student" && (
+              <label className="field">
+                <span>Select student</span>
+                <select
+                  value={targetStudentId}
+                  onChange={(event) =>
+                    setTargetStudentId(event.target.value)
+                  }
+                  required
+                >
+                  <option value="">Choose a student</option>
+                  {students.map((student) => (
+                    <option key={student.id} value={student.id}>
+                      {student.full_name}
+                      {student.roll_number
+                        ? ` — Roll ${student.roll_number}`
+                        : ""}
                     </option>
-
-
-                    {students.map(
-                      (student) => (
-
-                        <option
-                          key={
-                            student.id
-                          }
-                          value={
-                            student.id
-                          }
-                        >
-
-                          {
-                            student.full_name
-                          }
-
-                          {" - "}
-
-                          {
-                            student.roll_number ||
-                            "No roll number"
-                          }
-
-                        </option>
-
-                      )
-                    )}
-
-                  </select>
-
+                  ))}
+                </select>
+                {students.length === 0 && (
+                  <small>No matching students were found.</small>
                 )}
-
-              </>
+              </label>
             )}
+          </div>
 
-
-            {/* SEND */}
-
+          <div className="form-actions">
             <button
               type="submit"
-              disabled={loading}
+              className="button button-primary"
+              disabled={sending}
             >
-
-              {loading
-                ? "Sending..."
-                : "Send Homework"}
-
+              {sending ? "Sending..." : "Send Homework"}
+              {!sending && <span aria-hidden="true">→</span>}
             </button>
+          </div>
+        </form>
+      </section>
 
-          </form>
-
+      <section className="panel">
+        <div className="section-heading">
+          <div className="section-icon">▤</div>
+          <div>
+            <h2>Sent Homework</h2>
+            <p>Assignments you have shared with students.</p>
+          </div>
         </div>
 
-
-        {/* ==================================================
-            SENT HOMEWORK
-            ================================================== */}
-
-        <div className="dashboard-card">
-
-          <h2>
-            Sent Homework
-          </h2>
-
-
-          {homeworkList.length ===
-          0 ? (
-
-            <p>
-              No homework sent yet.
-            </p>
-
-          ) : (
-
-            homeworkList.map(
-              (homework) => (
-
-                <div
-                  className="homework-item"
-                  key={
-                    homework.id
-                  }
-                >
-
-                  <h3>
-                    {
-                      homework.subject
-                    }
-                  </h3>
-
-
-                  <p>
-                    {
-                      homework.homework_text
-                    }
-                  </p>
-
-
-                  <p>
-
-                    <strong>
-                      Sent:
-                    </strong>{" "}
-
-                    {new Date(
-                      homework.created_at
-                    ).toLocaleString()}
-
-                  </p>
-
-
-                  {homework.due_date && (
-                    <p>
-
-                      <strong>
-                        Due:
-                      </strong>{" "}
-
-                      {
-                        homework.due_date
-                      }
-
-                    </p>
-                  )}
-
-
-                  <p>
-
-                    <strong>
-                      Recipient:
-                    </strong>{" "}
-
-                    {
-                      homework.recipient_type ===
-                      "class"
-                        ? "Entire Matching Class"
-                        : "Specific Student"
-                    }
-
-                  </p>
-
-
-                  {homework.recipient_type ===
-                    "student" && (
-
-                    <p>
-
-                      <strong>
-                        Student:
-                      </strong>{" "}
-
-                      {
-                        students.find(
-                          (student) =>
-                            student.id ===
-                            homework.recipient_student_id
-                        )?.full_name ||
-                        "Specific student"
-                      }
-
-                    </p>
-
-                  )}
-
+        {loading ? (
+          <p className="empty-state">Loading homework...</p>
+        ) : homeworkList.length === 0 ? (
+          <EmptyState
+            icon="▤"
+            title="No homework yet"
+            message="Your assignments will appear here after you send them."
+          />
+        ) : (
+          <div className="homework-list">
+            {homeworkList.map((item) => (
+              <article className="homework-card" key={item.id}>
+                <div className="homework-card-top">
+                  <span className="subject-tag">{item.subject}</span>
+                  <span className="status-pill status-blue">
+                    {item.target_type === "student"
+                      ? "Specific student"
+                      : "Whole class"}
+                  </span>
                 </div>
 
-              )
-            )
+                <h3>{item.subject}</h3>
+                <p className="homework-description">{item.homework}</p>
 
-          )}
+                <div className="homework-meta">
+                  <span>
+                    <strong>Due:</strong> {item.due_date}
+                  </span>
+                  <span>
+                    <strong>Sent to:</strong>{" "}
+                    {item.target_type === "student"
+                      ? getStudentName(item.target_student_id)
+                      : "Entire Matching Class"}
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
 
+      <section className="panel">
+        <div className="section-heading">
+          <div className="section-icon section-icon-green">✓</div>
+          <div>
+            <h2>Finished Homework</h2>
+            <p>See which students have completed their assignments.</p>
+          </div>
         </div>
 
+        {completions.length === 0 ? (
+          <EmptyState
+            icon="✓"
+            title="Nothing finished yet"
+            message="Completed homework will appear here."
+          />
+        ) : (
+          <div className="homework-list">
+            {completions.map((completion) => {
+              const item = homeworkList.find(
+                (homework) => homework.id === completion.homework_id
+              );
+              const student = students.find(
+                (entry) => entry.id === completion.student_id
+              );
 
-        {/* ==================================================
-            FINISHED HOMEWORK
-            ================================================== */}
+              if (!item) return null;
 
-        <div className="dashboard-card">
-
-          <h2>
-            Finished Homework
-          </h2>
-
-
-          {completionList.length ===
-          0 ? (
-
-            <p>
-              No student has finished homework yet.
-            </p>
-
-          ) : (
-
-            completionList.map(
-              (completion) => {
-
-                const homework =
-                  getHomeworkForCompletion(
-                    completion
-                  );
-
-
-                const student =
-                  getStudentForCompletion(
-                    completion
-                  );
-
-
-                if (!homework) {
-                  return null;
-                }
-
-
-                return (
-
-                  <div
-                    className="homework-item"
-                    key={
-                      completion.id
-                    }
-                  >
-
-                    <h3>
-                      {
-                        homework.subject
-                      }
-                    </h3>
-
-
-                    <p>
-
-                      <strong>
-                        Student:
-                      </strong>{" "}
-
-                      {
-                        student?.full_name ||
-                        "Unknown Student"
-                      }
-
-                    </p>
-
-
-                    {student?.roll_number && (
-                      <p>
-
-                        <strong>
-                          Roll Number:
-                        </strong>{" "}
-
-                        {
-                          student.roll_number
-                        }
-
-                      </p>
-                    )}
-
-
-                    <p>
-
-                      <strong>
-                        Homework:
-                      </strong>{" "}
-
-                      {
-                        homework.homework_text
-                      }
-
-                    </p>
-
-
-                    {homework.due_date && (
-                      <p>
-
-                        <strong>
-                          Due:
-                        </strong>{" "}
-
-                        {
-                          homework.due_date
-                        }
-
-                      </p>
-                    )}
-
-
-                    <p>
-
-                      <strong>
-                        Status:
-                      </strong>{" "}
-
-                      Finished
-
-                    </p>
-
-
-                    {completion.completed_at && (
-                      <p>
-
-                        <strong>
-                          Finished At:
-                        </strong>{" "}
-
-                        {new Date(
-                          completion.completed_at
-                        ).toLocaleString()}
-
-                      </p>
-                    )}
-
+              return (
+                <article className="homework-card" key={completion.id}>
+                  <div className="homework-card-top">
+                    <span className="subject-tag">{item.subject}</span>
+                    <span className="status-pill status-green">
+                      ✓ Finished
+                    </span>
                   </div>
 
-                );
-              }
-            )
+                  <h3>{item.subject}</h3>
+                  <p className="homework-description">{item.homework}</p>
+                  <div className="completion-student">
+                    {student?.photo_url ? (
+                      <img src={student.photo_url} alt="" />
+                    ) : (
+                      <span className="mini-avatar">
+                        {student?.full_name?.charAt(0) || "S"}
+                      </span>
+                    )}
+                    <div>
+                      <strong>{student?.full_name || "Student"}</strong>
+                      <small>
+                        {student?.roll_number
+                          ? `Roll number: ${student.roll_number}`
+                          : "Student"}
+                      </small>
+                    </div>
+                  </div>
 
-          )}
-
-        </div>
-
-
-      </div>
-
+                  {completion.completed_at && (
+                    <p className="completion-date">
+                      Finished{" "}
+                      {new Date(completion.completed_at).toLocaleString()}
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
 
-
-/* ============================================================
-   STUDENT DASHBOARD
-   ============================================================ */
-
-function StudentDashboard({
-  profile,
-  onLogout,
-}) {
-
-  const [homework, setHomework] =
-    useState([]);
-
-  const [history, setHistory] =
-    useState([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [message, setMessage] =
-    useState("");
-
-  const [error, setError] =
-    useState("");
-
-
-  /* ==========================================================
-     LOAD STUDENT HOMEWORK
-     ========================================================== */
+function StudentDashboard({ profile, onLogout }) {
+  const [homeworkList, setHomeworkList] = useState([]);
+  const [completions, setCompletions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [workingId, setWorkingId] = useState(null);
 
   useEffect(() => {
+    loadStudentData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.id]);
 
-    loadHomework();
-
-  }, []);
-
-
-  /* ==========================================================
-     LOAD HOMEWORK
-     ========================================================== */
-
-  async function loadHomework() {
-
+  async function loadStudentData() {
     setLoading(true);
-
     setError("");
 
-
-    /* --------------------------------------------------------
-       LOAD HOMEWORK
-       -------------------------------------------------------- */
-
-    const {
-      data:
-        homeworkData,
-      error:
-        homeworkError,
-    } =
-      await supabase
-        .from("homework")
-        .select("*")
-        .order(
-          "created_at",
-          {
-            ascending: false,
-          }
-        );
-
+    const { data: allHomework, error: homeworkError } = await supabase
+      .from("homework")
+      .select("*")
+      .order("created_at", { ascending: false });
 
     if (homeworkError) {
-
-      setError(
-        homeworkError.message
-      );
-
+      setError("Could not load homework: " + homeworkError.message);
       setLoading(false);
-
       return;
     }
 
-
-    /* --------------------------------------------------------
-       LOAD COMPLETIONS
-       -------------------------------------------------------- */
-
-    const {
-      data:
-        completionData,
-      error:
-        completionError,
-    } =
-      await supabase
-        .from(
-          "homework_completions"
-        )
-        .select("*")
-        .eq(
-          "student_id",
-          profile.id
-        );
-
-
-    if (completionError) {
-
-      setError(
-        completionError.message
-      );
-
-      setLoading(false);
-
-      return;
-    }
-
-
-    const completedIds =
-      new Set(
-        (completionData || [])
-          .map(
-            (item) =>
-              item.homework_id
-          )
-      );
-
-
-    /* --------------------------------------------------------
-       FILTER HOMEWORK FOR THIS STUDENT
-
-       Matching:
-       Institution
-       Class
-       Section
-       Group
-
-       OR specific student.
-       -------------------------------------------------------- */
-
-    const matchingHomework =
-      (homeworkData || []).filter(
-        (item) => {
-
-          /* Specific student */
-
-          if (
-            item.recipient_type ===
-            "student"
-          ) {
-
-            return (
-              item.recipient_student_id ===
-              profile.id
-            );
-          }
-
-
-          /* Entire matching class */
-
-          const institutionMatches =
-            item.recipient_institution_name ===
-            profile.institution_name;
-
-
-          const classMatches =
-            item.recipient_class_name ===
-            profile.class_name;
-
-
-          const sectionMatches =
-            item.recipient_section ===
-            profile.section;
-
-
-          const groupMatches =
-            item.recipient_group_name ===
-            profile.group_name;
-
-
-          return (
-            institutionMatches &&
-            classMatches &&
-            sectionMatches &&
-            groupMatches
-          );
-        }
-      );
-
-
-    /* --------------------------------------------------------
-       SEPARATE ACTIVE AND HISTORY
-       -------------------------------------------------------- */
-
-    const activeHomework = [];
-
-    const historyHomework = [];
-
-
-    matchingHomework.forEach(
-      (item) => {
-
-        if (
-          completedIds.has(
-            item.id
-          )
-        ) {
-
-          historyHomework.push(
-            item
-          );
-
-        } else {
-
-          activeHomework.push(
-            item
-          );
-
-        }
-
+    const matchingHomework = (allHomework || []).filter((item) => {
+      if (
+        item.institution_name !== profile.institution_name ||
+        item.class_name !== profile.class_name ||
+        item.section !== profile.section
+      ) {
+        return false;
       }
-    );
 
+      if (
+        profile.institution_type === "High School" ||
+        profile.institution_type === "College"
+      ) {
+        if (
+          (item.group_name || "").trim().toLowerCase() !==
+          (profile.group_name || "").trim().toLowerCase()
+        ) {
+          return false;
+        }
+      }
 
-    setHomework(
-      activeHomework
-    );
+      if (
+        item.target_type === "student" &&
+        item.target_student_id !== profile.id
+      ) {
+        return false;
+      }
 
+      return true;
+    });
 
-    setHistory(
-      historyHomework
-    );
+    setHomeworkList(matchingHomework);
 
+    const ids = matchingHomework.map((item) => item.id);
+
+    if (ids.length) {
+      const { data: completionData, error: completionError } =
+        await supabase
+          .from("homework_completions")
+          .select("*")
+          .eq("student_id", profile.id)
+          .in("homework_id", ids);
+
+      if (completionError) {
+        setError(
+          "Could not load homework history: " + completionError.message
+        );
+      } else {
+        setCompletions(completionData || []);
+      }
+    } else {
+      setCompletions([]);
+    }
 
     setLoading(false);
   }
 
-
-  /* ==========================================================
-     FINISH HOMEWORK
-     ========================================================== */
-
-  async function finishHomework(
-    homeworkId
-  ) {
-
-    setError("");
-
-    setMessage("");
-
-
-    const {
-      error:
-        completionError,
-    } =
-      await supabase
-        .from(
-          "homework_completions"
-        )
-        .insert({
-          homework_id:
-            homeworkId,
-
-          student_id:
-            profile.id,
-        });
-
-
-    if (completionError) {
-
-      if (
-        completionError.code ===
-        "23505"
-      ) {
-
-        setMessage(
-          "This homework is already finished."
-        );
-
-      } else {
-
-        setError(
-          completionError.message
-        );
-
-      }
-
-      return;
-    }
-
-
-    setMessage(
-      "Homework marked as finished."
-    );
-
-
-    await loadHomework();
+  function isFinished(homeworkId) {
+    return completions.some((item) => item.homework_id === homeworkId);
   }
 
+  async function finishHomework(item) {
+    if (isFinished(item.id)) return;
 
-  /* ==========================================================
-     STUDENT UI
-     ========================================================== */
+    setError("");
+    setWorkingId(item.id);
+
+    const { data, error: completionError } = await supabase
+      .from("homework_completions")
+      .insert({
+        homework_id: item.id,
+        student_id: profile.id,
+        completed_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (completionError) {
+      setError(
+        "Could not mark homework as finished: " + completionError.message
+      );
+    } else {
+      setCompletions((previous) => [...previous, data]);
+    }
+
+    setWorkingId(null);
+  }
+
+  const today = new Date().toLocaleDateString("en-CA");
+
+  const activeHomework = homeworkList.filter(
+    (item) => !isFinished(item.id) && item.due_date >= today
+  );
+
+  const historyHomework = homeworkList.filter(
+    (item) => isFinished(item.id) || item.due_date < today
+  );
 
   return (
-    <div className="app">
+    <div className="dashboard">
+      <ProfileCard profile={profile} onLogout={onLogout} />
 
-      <div className="dashboard">
-
-
-        {/* ==================================================
-            TOP BAR
-            ================================================== */}
-
-        <div className="topbar">
-
-          <h1>
-            STUDENT HOMEWORK DIARY
-          </h1>
-
-          <button
-            onClick={onLogout}
-          >
-            Logout
-          </button>
-
+      <div className="dashboard-heading">
+        <div>
+          <span className="eyebrow">YOUR LEARNING SPACE</span>
+          <h1>Student Dashboard</h1>
+          <p>Keep up with your assignments, one task at a time.</p>
         </div>
-
-
-        {/* ==================================================
-            PROFILE
-            ================================================== */}
-
-        <ProfileCard
-          profile={profile}
-        />
-
-
-        {/* ==================================================
-            MESSAGES
-            ================================================== */}
-
-        {error && (
-          <div className="error">
-            {error}
-          </div>
-        )}
-
-
-        {message && (
-          <div className="success">
-            {message}
-          </div>
-        )}
-
-
-        {/* ==================================================
-            MY HOMEWORK
-            ================================================== */}
-
-        <div className="dashboard-card">
-
-          <h2>
-            My Homework
-          </h2>
-
-
-          {loading ? (
-
-            <p>
-              Loading homework...
-            </p>
-
-          ) : homework.length ===
-            0 ? (
-
-            <p>
-              No new homework.
-            </p>
-
-          ) : (
-
-            homework.map(
-              (item) => (
-
-                <div
-                  className="homework-item"
-                  key={
-                    item.id
-                  }
-                >
-
-                  <h3>
-                    {
-                      item.subject
-                    }
-                  </h3>
-
-
-                  <p>
-                    {
-                      item.homework_text
-                    }
-                  </p>
-
-
-                  {item.due_date && (
-                    <p>
-
-                      <strong>
-                        Due:
-                      </strong>{" "}
-
-                      {
-                        item.due_date
-                      }
-
-                    </p>
-                  )}
-
-
-                  <p>
-
-                    <strong>
-                      Received:
-                    </strong>{" "}
-
-                    {new Date(
-                      item.created_at
-                    ).toLocaleString()}
-
-                  </p>
-
-
-                  <button
-                    onClick={() =>
-                      finishHomework(
-                        item.id
-                      )
-                    }
-                  >
-                    Finished
-                  </button>
-
-                </div>
-
-              )
-            )
-
-          )}
-
-        </div>
-
-
-        {/* ==================================================
-            HISTORY HOMEWORK
-            ================================================== */}
-
-        <div className="dashboard-card">
-
-          <h2>
-            History Homework
-          </h2>
-
-
-          {history.length ===
-          0 ? (
-
-            <p>
-              No finished homework yet.
-            </p>
-
-          ) : (
-
-            history.map(
-              (item) => (
-
-                <div
-                  className="homework-item history-item"
-                  key={
-                    item.id
-                  }
-                >
-
-                  <h3>
-                    {
-                      item.subject
-                    }
-                  </h3>
-
-
-                  <p>
-                    {
-                      item.homework_text
-                    }
-                  </p>
-
-
-                  {item.due_date && (
-                    <p>
-
-                      <strong>
-                        Due:
-                      </strong>{" "}
-
-                      {
-                        item.due_date
-                      }
-
-                    </p>
-                  )}
-
-
-                  <p>
-
-                    <strong>
-                      Status:
-                    </strong>{" "}
-
-                    Finished
-
-                  </p>
-
-                </div>
-
-              )
-            )
-
-          )}
-
-        </div>
-
-
       </div>
 
+      <div className="stats-grid stats-grid-student">
+        <div className="stat-card">
+          <span className="stat-icon stat-blue">▤</span>
+          <div>
+            <span className="stat-label">Active homework</span>
+            <strong>{activeHomework.length}</strong>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <span className="stat-icon stat-green">✓</span>
+          <div>
+            <span className="stat-label">Finished</span>
+            <strong>{completions.length}</strong>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <span className="stat-icon stat-violet">◷</span>
+          <div>
+            <span className="stat-label">History items</span>
+            <strong>{historyHomework.length}</strong>
+          </div>
+        </div>
+      </div>
+
+      <section className="panel">
+        <div className="section-heading">
+          <div className="section-icon">▤</div>
+          <div>
+            <h2>My Homework</h2>
+            <p>Complete these assignments before their due dates.</p>
+          </div>
+        </div>
+
+        {error && <div className="alert alert-error">{error}</div>}
+
+        {loading ? (
+          <p className="empty-state">Loading homework...</p>
+        ) : activeHomework.length === 0 ? (
+          <EmptyState
+            icon="✓"
+            title="You're all caught up"
+            message="There is no active homework for you right now."
+          />
+        ) : (
+          <div className="homework-list">
+            {activeHomework.map((item) => (
+              <article className="homework-card" key={item.id}>
+                <div className="homework-card-top">
+                  <span className="subject-tag">{item.subject}</span>
+                  <span className="status-pill status-blue">To do</span>
+                </div>
+
+                <h3>{item.subject}</h3>
+                <p className="homework-description">{item.homework}</p>
+
+                <div className="homework-meta">
+                  <span>
+                    <strong>Due:</strong> {item.due_date}
+                  </span>
+                </div>
+
+                <div className="homework-card-actions">
+                  <button
+                    className="button button-primary"
+                    onClick={() => finishHomework(item)}
+                    disabled={workingId === item.id}
+                  >
+                    {workingId === item.id ? "Saving..." : "✓ Finished"}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <div className="section-icon section-icon-green">◷</div>
+          <div>
+            <h2>History Homework</h2>
+            <p>Review finished and past-due assignments.</p>
+          </div>
+        </div>
+
+        {loading ? (
+          <p className="empty-state">Loading history...</p>
+        ) : historyHomework.length === 0 ? (
+          <EmptyState
+            icon="◷"
+            title="Your history is empty"
+            message="Finished or past-due assignments will appear here."
+          />
+        ) : (
+          <div className="homework-list">
+            {historyHomework.map((item) => (
+              <article className="homework-card history-card" key={item.id}>
+                <div className="homework-card-top">
+                  <span className="subject-tag">{item.subject}</span>
+                  <span
+                    className={`status-pill ${
+                      isFinished(item.id) ? "status-green" : "status-muted"
+                    }`}
+                  >
+                    {isFinished(item.id) ? "✓ Finished" : "Past due"}
+                  </span>
+                </div>
+
+                <h3>{item.subject}</h3>
+                <p className="homework-description">{item.homework}</p>
+                <div className="homework-meta">
+                  <span>
+                    <strong>Due:</strong> {item.due_date}
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
 
-
-/* ============================================================
-   EXPORT
-   ============================================================ */
+function EmptyState({ icon, title, message }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-state-icon">{icon}</div>
+      <h3>{title}</h3>
+      <p>{message}</p>
+    </div>
+  );
+}
 
 export default App;
