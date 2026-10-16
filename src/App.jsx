@@ -18,22 +18,6 @@ const emptyProfile = {
   roll_number: "",
 };
 
-// Suggestions are optional: users can still type other institution and group names.
-const INSTITUTION_SUGGESTIONS = ["PUBLIC SCHOOL AND COLLEGE SKARDU"];
-const GROUP_SUGGESTIONS = [
-  "COMPUTER SCIENCE",
-  "MEDICAL",
-  "PRE-ENGINEER",
-];
-
-// Treat capitalization and repeated/leading/trailing spaces as equivalent.
-function normalizeText(value) {
-  return String(value ?? "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLocaleLowerCase();
-}
-
 function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -409,24 +393,45 @@ function RegisterPage({
     setSubmitting(true);
 
     try {
+      // Create the Auth account and pass profile fields as user metadata.
+      // The Supabase trigger creates the matching public.profiles row.
       const { data: authData, error: authError } =
         await supabase.auth.signUp({
           email: form.email.trim(),
           password: form.password,
+          options: {
+            data: {
+              full_name: form.full_name.trim(),
+              father_name:
+                form.role === "Student" ? form.father_name.trim() : null,
+              role: form.role,
+              age: form.age ? Number(form.age) : null,
+              gender: form.gender || null,
+              institution_type: form.institution_type,
+              institution_name: form.institution_name.trim(),
+              class_name: form.class_name.trim(),
+              section: form.section.trim(),
+              group_name: form.group_name.trim() || null,
+              roll_number:
+                form.role === "Student"
+                  ? form.roll_number.trim() || null
+                  : null,
+            },
+          },
         });
 
       if (authError) throw authError;
 
-      const user = authData.user;
-
+      const user = authData?.user;
       if (!user) {
         throw new Error("Account could not be created. Please try again.");
       }
 
-      let photoUrl = null;
-
-      if (photo) {
-        const extension = photo.name.split(".").pop() || "jpg";
+      // Upload the photo only when signup creates an active session.
+      // With email confirmation enabled, the user can log in first and
+      // upload a photo later; profile creation does not depend on the photo.
+      if (photo && authData.session) {
+        const extension = photo.name.split(".").pop()?.toLowerCase() || "jpg";
         const filePath = `${user.id}/profile-${Date.now()}.${extension}`;
 
         const { error: uploadError } = await supabase.storage
@@ -438,7 +443,7 @@ function RegisterPage({
 
         if (uploadError) {
           throw new Error(
-            "Account created, but photo upload failed: " +
+            "Your account was created, but the photo upload failed: " +
               uploadError.message
           );
         }
@@ -447,52 +452,31 @@ function RegisterPage({
           .from("profile-photos")
           .getPublicUrl(filePath);
 
-        photoUrl = photoData.publicUrl;
-      }
+        const { error: photoUpdateError } = await supabase
+          .from("profiles")
+          .update({ photo_url: photoData.publicUrl })
+          .eq("id", user.id);
 
-      const profileData = {
-        id: user.id,
-        role: form.role,
-        full_name: form.full_name.trim(),
-        father_name:
-          form.role === "Student" ? form.father_name.trim() : null,
-        email: form.email.trim(),
-        age: form.age ? Number(form.age) : null,
-        gender: form.gender || null,
-        institution_type: form.institution_type,
-        institution_name: form.institution_name.trim(),
-        class_name: form.class_name.trim(),
-        section: form.section.trim(),
-        group_name: form.group_name.trim() || null,
-        roll_number:
-          form.role === "Student"
-            ? form.roll_number.trim() || null
-            : null,
-        photo_url: photoUrl,
-      };
-
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .insert(profileData);
-
-      if (profileError) {
-        throw new Error(
-          "Account was created, but saving its profile failed: " +
-            profileError.message
-        );
+        if (photoUpdateError) {
+          throw new Error(
+            "Your account was created, but saving the photo link failed: " +
+              photoUpdateError.message
+          );
+        }
       }
 
       if (authData.session) {
         setSuccess(
-          "Your account and profile were created. If your dashboard does not open, log in using your new account."
+          "Your account was created. Your profile is created automatically. You can now log in if the dashboard does not open."
         );
       } else {
         setSuccess(
-          "Your account was created. Check your email if confirmation is required, then log in."
+          "Your account was created. Check your email to confirm your account if requested, then log in. The profile is created automatically by Supabase."
         );
       }
     } catch (err) {
-      setError(err.message || "Registration failed.");
+      console.error("Registration error:", err);
+      setError(err.message || "Registration failed. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -626,14 +610,8 @@ function RegisterPage({
                 value={form.institution_name}
                 onChange={updateField}
                 placeholder="Enter school or college name"
-                list="institution-name-suggestions"
                 required
               />
-              <datalist id="institution-name-suggestions">
-                {INSTITUTION_SUGGESTIONS.map((name) => (
-                  <option key={name} value={name} />
-                ))}
-              </datalist>
             </label>
 
             <label className="field">
@@ -667,13 +645,7 @@ function RegisterPage({
                   value={form.group_name}
                   onChange={updateField}
                   placeholder="For example, CS"
-                  list="group-name-suggestions"
                 />
-                <datalist id="group-name-suggestions">
-                  {GROUP_SUGGESTIONS.map((name) => (
-                    <option key={name} value={name} />
-                  ))}
-                </datalist>
               </label>
             )}
 
@@ -790,8 +762,6 @@ function ProfileCard({ profile, onLogout }) {
 
 function TeacherDashboard({ profile, onLogout }) {
   const [students, setStudents] = useState([]);
-  const [selectedClass, setSelectedClass] = useState(profile.class_name || "");
-  const [selectedSection, setSelectedSection] = useState(profile.section || "");
   const [homeworkList, setHomeworkList] = useState([]);
   const [completions, setCompletions] = useState([]);
   const [subject, setSubject] = useState("");
@@ -816,7 +786,10 @@ function TeacherDashboard({ profile, onLogout }) {
     const { data: studentData, error: studentError } = await supabase
       .from("profiles")
       .select("*")
-      .eq("role", "Student");
+      .eq("role", "Student")
+      .eq("institution_name", profile.institution_name)
+      .eq("class_name", profile.class_name)
+      .eq("section", profile.section);
 
     if (studentError) {
       setError("Could not load students: " + studentError.message);
@@ -824,14 +797,21 @@ function TeacherDashboard({ profile, onLogout }) {
       return;
     }
 
-    // Match institution names without case/extra-space differences.
-    // Keep students from all classes at this institution in memory;
-    // selected class and section determine recipients below.
-    const sameInstitutionStudents = (studentData || []).filter((student) =>
-      normalizeText(student.institution_name) ===
-      normalizeText(profile.institution_name)
-    );
-    setStudents(sameInstitutionStudents);
+    const matchingStudents = (studentData || []).filter((student) => {
+      if (
+        profile.institution_type === "High School" ||
+        profile.institution_type === "College"
+      ) {
+        return (
+          (student.group_name || "").trim().toLowerCase() ===
+          (profile.group_name || "").trim().toLowerCase()
+        );
+      }
+
+      return true;
+    });
+
+    setStudents(matchingStudents);
 
     const { data: homeworkData, error: homeworkError } = await supabase
       .from("homework")
@@ -880,18 +860,8 @@ function TeacherDashboard({ profile, onLogout }) {
       return;
     }
 
-    if (!selectedClass.trim() || !selectedSection.trim()) {
-      setError("Please enter the class and section for this homework.");
-      return;
-    }
-
     if (!subject.trim() || !homeworkText.trim() || !dueDate) {
       setError("Please enter the subject, homework details, and due date.");
-      return;
-    }
-
-    if (targetType === "student" && !matchingStudents.some((student) => student.id === targetStudentId)) {
-      setError("Please select a student from the selected class and section.");
       return;
     }
 
@@ -901,8 +871,8 @@ function TeacherDashboard({ profile, onLogout }) {
     const newHomework = {
       teacher_id: profile.id,
       recipient_institution_name: profile.institution_name,
-      recipient_class_name: selectedClass.trim(),
-      recipient_section: selectedSection.trim(),
+      recipient_class_name: profile.class_name,
+      recipient_section: profile.section,
       recipient_group_name: profile.group_name || null,
       subject: subject.trim(),
       homework_text: homeworkText.trim(),
@@ -930,24 +900,6 @@ function TeacherDashboard({ profile, onLogout }) {
 
     setSending(false);
   }
-
-  const matchingStudents = students.filter((student) => {
-    if (
-      normalizeText(student.class_name) !== normalizeText(selectedClass) ||
-      normalizeText(student.section) !== normalizeText(selectedSection)
-    ) {
-      return false;
-    }
-
-    if (
-      profile.institution_type === "High School" ||
-      profile.institution_type === "College"
-    ) {
-      return normalizeText(student.group_name) === normalizeText(profile.group_name);
-    }
-
-    return true;
-  });
 
   function getStudentName(studentId) {
     return (
@@ -991,7 +943,7 @@ function TeacherDashboard({ profile, onLogout }) {
           <span className="stat-icon stat-violet">♙</span>
           <div>
             <span className="stat-label">Matching students</span>
-            <strong>{matchingStudents.length}</strong>
+            <strong>{students.length}</strong>
           </div>
         </div>
       </div>
@@ -1010,32 +962,6 @@ function TeacherDashboard({ profile, onLogout }) {
 
         <form onSubmit={sendHomework} className="form-stack">
           <div className="form-grid">
-            <label className="field">
-              <span>Class to teach</span>
-              <input
-                value={selectedClass}
-                onChange={(event) => {
-                  setSelectedClass(event.target.value);
-                  setTargetStudentId("");
-                }}
-                placeholder="Enter class"
-                required
-              />
-            </label>
-
-            <label className="field">
-              <span>Section</span>
-              <input
-                value={selectedSection}
-                onChange={(event) => {
-                  setSelectedSection(event.target.value);
-                  setTargetStudentId("");
-                }}
-                placeholder="Enter section"
-                required
-              />
-            </label>
-
             <label className="field">
               <span>Subject</span>
               <input
@@ -1093,7 +1019,7 @@ function TeacherDashboard({ profile, onLogout }) {
                   required
                 >
                   <option value="">Choose a student</option>
-                  {matchingStudents.map((student) => (
+                  {students.map((student) => (
                     <option key={student.id} value={student.id}>
                       {student.full_name}
                       {student.roll_number
@@ -1103,8 +1029,8 @@ function TeacherDashboard({ profile, onLogout }) {
                   ))}
                 </select>
 
-                {matchingStudents.length === 0 && (
-                  <small>No matching students were found for this class and section.</small>
+                {students.length === 0 && (
+                  <small>No matching students were found.</small>
                 )}
               </label>
             )}
@@ -1282,12 +1208,9 @@ function StudentDashboard({ profile, onLogout }) {
     // Use the actual recipient_* column names from Supabase.
     const matchingHomework = (allHomework || []).filter((item) => {
       if (
-        normalizeText(item.recipient_institution_name) !==
-          normalizeText(profile.institution_name) ||
-        normalizeText(item.recipient_class_name) !==
-          normalizeText(profile.class_name) ||
-        normalizeText(item.recipient_section) !==
-          normalizeText(profile.section)
+        item.recipient_institution_name !== profile.institution_name ||
+        item.recipient_class_name !== profile.class_name ||
+        item.recipient_section !== profile.section
       ) {
         return false;
       }
@@ -1297,8 +1220,8 @@ function StudentDashboard({ profile, onLogout }) {
         profile.institution_type === "College"
       ) {
         if (
-          normalizeText(item.recipient_group_name) !==
-          normalizeText(profile.group_name)
+          (item.recipient_group_name || "").trim().toLowerCase() !==
+          (profile.group_name || "").trim().toLowerCase()
         ) {
           return false;
         }
