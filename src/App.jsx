@@ -18,6 +18,22 @@ const emptyProfile = {
   roll_number: "",
 };
 
+// Suggestions are optional: users can still type other institution and group names.
+const INSTITUTION_SUGGESTIONS = ["PUBLIC SCHOOL AND COLLEGE SKARDU"];
+const GROUP_SUGGESTIONS = [
+  "COMPUTER SCIENCE",
+  "MEDICAL",
+  "PRE-ENGINEER",
+];
+
+// Treat capitalization and repeated/leading/trailing spaces as equivalent.
+function normalizeText(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase();
+}
+
 function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -610,8 +626,14 @@ function RegisterPage({
                 value={form.institution_name}
                 onChange={updateField}
                 placeholder="Enter school or college name"
+                list="institution-name-suggestions"
                 required
               />
+              <datalist id="institution-name-suggestions">
+                {INSTITUTION_SUGGESTIONS.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
             </label>
 
             <label className="field">
@@ -645,7 +667,13 @@ function RegisterPage({
                   value={form.group_name}
                   onChange={updateField}
                   placeholder="For example, CS"
+                  list="group-name-suggestions"
                 />
+                <datalist id="group-name-suggestions">
+                  {GROUP_SUGGESTIONS.map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
               </label>
             )}
 
@@ -762,6 +790,8 @@ function ProfileCard({ profile, onLogout }) {
 
 function TeacherDashboard({ profile, onLogout }) {
   const [students, setStudents] = useState([]);
+  const [selectedClass, setSelectedClass] = useState(profile.class_name || "");
+  const [selectedSection, setSelectedSection] = useState(profile.section || "");
   const [homeworkList, setHomeworkList] = useState([]);
   const [completions, setCompletions] = useState([]);
   const [subject, setSubject] = useState("");
@@ -786,10 +816,7 @@ function TeacherDashboard({ profile, onLogout }) {
     const { data: studentData, error: studentError } = await supabase
       .from("profiles")
       .select("*")
-      .eq("role", "Student")
-      .eq("institution_name", profile.institution_name)
-      .eq("class_name", profile.class_name)
-      .eq("section", profile.section);
+      .eq("role", "Student");
 
     if (studentError) {
       setError("Could not load students: " + studentError.message);
@@ -797,21 +824,14 @@ function TeacherDashboard({ profile, onLogout }) {
       return;
     }
 
-    const matchingStudents = (studentData || []).filter((student) => {
-      if (
-        profile.institution_type === "High School" ||
-        profile.institution_type === "College"
-      ) {
-        return (
-          (student.group_name || "").trim().toLowerCase() ===
-          (profile.group_name || "").trim().toLowerCase()
-        );
-      }
-
-      return true;
-    });
-
-    setStudents(matchingStudents);
+    // Match institution names without case/extra-space differences.
+    // Keep students from all classes at this institution in memory;
+    // selected class and section determine recipients below.
+    const sameInstitutionStudents = (studentData || []).filter((student) =>
+      normalizeText(student.institution_name) ===
+      normalizeText(profile.institution_name)
+    );
+    setStudents(sameInstitutionStudents);
 
     const { data: homeworkData, error: homeworkError } = await supabase
       .from("homework")
@@ -860,8 +880,18 @@ function TeacherDashboard({ profile, onLogout }) {
       return;
     }
 
+    if (!selectedClass.trim() || !selectedSection.trim()) {
+      setError("Please enter the class and section for this homework.");
+      return;
+    }
+
     if (!subject.trim() || !homeworkText.trim() || !dueDate) {
       setError("Please enter the subject, homework details, and due date.");
+      return;
+    }
+
+    if (targetType === "student" && !matchingStudents.some((student) => student.id === targetStudentId)) {
+      setError("Please select a student from the selected class and section.");
       return;
     }
 
@@ -871,8 +901,8 @@ function TeacherDashboard({ profile, onLogout }) {
     const newHomework = {
       teacher_id: profile.id,
       recipient_institution_name: profile.institution_name,
-      recipient_class_name: profile.class_name,
-      recipient_section: profile.section,
+      recipient_class_name: selectedClass.trim(),
+      recipient_section: selectedSection.trim(),
       recipient_group_name: profile.group_name || null,
       subject: subject.trim(),
       homework_text: homeworkText.trim(),
@@ -900,6 +930,24 @@ function TeacherDashboard({ profile, onLogout }) {
 
     setSending(false);
   }
+
+  const matchingStudents = students.filter((student) => {
+    if (
+      normalizeText(student.class_name) !== normalizeText(selectedClass) ||
+      normalizeText(student.section) !== normalizeText(selectedSection)
+    ) {
+      return false;
+    }
+
+    if (
+      profile.institution_type === "High School" ||
+      profile.institution_type === "College"
+    ) {
+      return normalizeText(student.group_name) === normalizeText(profile.group_name);
+    }
+
+    return true;
+  });
 
   function getStudentName(studentId) {
     return (
@@ -943,7 +991,7 @@ function TeacherDashboard({ profile, onLogout }) {
           <span className="stat-icon stat-violet">♙</span>
           <div>
             <span className="stat-label">Matching students</span>
-            <strong>{students.length}</strong>
+            <strong>{matchingStudents.length}</strong>
           </div>
         </div>
       </div>
@@ -962,6 +1010,32 @@ function TeacherDashboard({ profile, onLogout }) {
 
         <form onSubmit={sendHomework} className="form-stack">
           <div className="form-grid">
+            <label className="field">
+              <span>Class to teach</span>
+              <input
+                value={selectedClass}
+                onChange={(event) => {
+                  setSelectedClass(event.target.value);
+                  setTargetStudentId("");
+                }}
+                placeholder="Enter class"
+                required
+              />
+            </label>
+
+            <label className="field">
+              <span>Section</span>
+              <input
+                value={selectedSection}
+                onChange={(event) => {
+                  setSelectedSection(event.target.value);
+                  setTargetStudentId("");
+                }}
+                placeholder="Enter section"
+                required
+              />
+            </label>
+
             <label className="field">
               <span>Subject</span>
               <input
@@ -1019,7 +1093,7 @@ function TeacherDashboard({ profile, onLogout }) {
                   required
                 >
                   <option value="">Choose a student</option>
-                  {students.map((student) => (
+                  {matchingStudents.map((student) => (
                     <option key={student.id} value={student.id}>
                       {student.full_name}
                       {student.roll_number
@@ -1029,8 +1103,8 @@ function TeacherDashboard({ profile, onLogout }) {
                   ))}
                 </select>
 
-                {students.length === 0 && (
-                  <small>No matching students were found.</small>
+                {matchingStudents.length === 0 && (
+                  <small>No matching students were found for this class and section.</small>
                 )}
               </label>
             )}
@@ -1208,9 +1282,12 @@ function StudentDashboard({ profile, onLogout }) {
     // Use the actual recipient_* column names from Supabase.
     const matchingHomework = (allHomework || []).filter((item) => {
       if (
-        item.recipient_institution_name !== profile.institution_name ||
-        item.recipient_class_name !== profile.class_name ||
-        item.recipient_section !== profile.section
+        normalizeText(item.recipient_institution_name) !==
+          normalizeText(profile.institution_name) ||
+        normalizeText(item.recipient_class_name) !==
+          normalizeText(profile.class_name) ||
+        normalizeText(item.recipient_section) !==
+          normalizeText(profile.section)
       ) {
         return false;
       }
@@ -1220,8 +1297,8 @@ function StudentDashboard({ profile, onLogout }) {
         profile.institution_type === "College"
       ) {
         if (
-          (item.recipient_group_name || "").trim().toLowerCase() !==
-          (profile.group_name || "").trim().toLowerCase()
+          normalizeText(item.recipient_group_name) !==
+          normalizeText(profile.group_name)
         ) {
           return false;
         }
