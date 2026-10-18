@@ -21,6 +21,14 @@ const emptyProfile = {
   roll_number: "",
 };
 
+// Treat capitalization and repeated/leading/trailing spaces as equivalent.
+function normalizeText(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase();
+}
+
 function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -86,11 +94,3 @@ function App() {
 
   useEffect(() => {
     if (!authReady) return;
-
-    if (!session?.user?.id) {
-      setProfile(null);
-      setLoading(false);
-      return;
-    }
-
-    let active = true;
