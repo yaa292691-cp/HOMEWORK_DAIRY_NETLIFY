@@ -1,128 +1,96 @@
-          <div>
-            <span className="stat-label">Finished</span>
-            <strong>{completions.length}</strong>
-          </div>
-        </div>
+import React, { useEffect, useState } from "react";
+import { supabase } from "./lib/supabase";
+import "./styles.css";
 
-        <div className="stat-card">
-          <span className="stat-icon stat-violet">◷</span>
-          <div>
-            <span className="stat-label">History items</span>
-            <strong>{historyHomework.length}</strong>
-          </div>
-        </div>
-      </div>
+const FIXED_INSTITUTION_NAME = "PUBLIC SCHOOL AND COLLEGE SKARDU";
+const GROUP_OPTIONS = ["COMPUTER SCIENCE", "PREMEDICAL", "ENGINEERING"];
 
-      <section className="panel">
-        <div className="section-heading">
-          <div className="section-icon">▤</div>
-          <div>
-            <h2>My Homework</h2>
-            <p>Complete these assignments before their due dates.</p>
-          </div>
-        </div>
+const emptyProfile = {
+  role: "Student",
+  full_name: "",
+  father_name: "",
+  email: "",
+  password: "",
+  age: "",
+  gender: "",
+  institution_type: "",
+  institution_name: FIXED_INSTITUTION_NAME,
+  class_name: "",
+  section: "",
+  group_name: "",
+  roll_number: "",
+};
 
-        {error && <div className="alert alert-error">{error}</div>}
+function App() {
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [page, setPage] = useState("login");
+  const [authReady, setAuthReady] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-        {loading ? (
-          <p className="empty-state">Loading homework...</p>
-        ) : activeHomework.length === 0 ? (
-          <EmptyState
-            icon="✓"
-            title="You're all caught up"
-            message="There is no active homework for you right now."
-          />
-        ) : (
-          <div className="homework-list">
-            {activeHomework.map((item) => (
-              <article className="homework-card" key={item.id}>
-                <div className="homework-card-top">
-                  <span className="subject-tag">{item.subject}</span>
-                  <span className="status-pill status-blue">To do</span>
-                </div>
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem("homework-diary-theme") || "light";
+    } catch {
+      return "light";
+    }
+  });
 
-                <h3>{item.subject}</h3>
-                <p className="homework-description">
-                  {item.homework_text}
-                </p>
+  useEffect(() => {
+    try {
+      localStorage.setItem("homework-diary-theme", theme);
+    } catch {
+      // Theme still works for this session.
+    }
+  }, [theme]);
 
-                <div className="homework-meta">
-                  <span>
-                    <strong>Due:</strong> {item.due_date}
-                  </span>
-                </div>
+  useEffect(() => {
+    let active = true;
 
-                <div className="homework-card-actions">
-                  <button
-                    className="button button-primary"
-                    onClick={() => finishHomework(item)}
-                    disabled={workingId === item.id}
-                  >
-                    {workingId === item.id ? "Saving..." : "✓ Finished"}
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+    async function initialize() {
+      const { data, error } = await supabase.auth.getSession();
 
-      <section className="panel">
-        <div className="section-heading">
-          <div className="section-icon section-icon-green">◷</div>
-          <div>
-            <h2>History Homework</h2>
-            <p>Review finished and past-due assignments.</p>
-          </div>
-        </div>
+      if (!active) return;
 
-        {loading ? (
-          <p className="empty-state">Loading history...</p>
-        ) : historyHomework.length === 0 ? (
-          <EmptyState
-            icon="◷"
-            title="Your history is empty"
-            message="Finished or past-due assignments will appear here."
-          />
-        ) : (
-          <div className="homework-list">
-            {historyHomework.map((item) => (
-              <article className="homework-card history-card" key={item.id}>
-                <div className="homework-card-top">
-                  <span className="subject-tag">{item.subject}</span>
-                  <span
-                    className={`status-pill ${
-                      isFinished(item.id) ? "status-green" : "status-muted"
-                    }`}
-                  >
-                    {isFinished(item.id) ? "✓ Finished" : "Past due"}
-                  </span>
-                </div>
+      if (error) {
+        setError(error.message);
+      }
 
-                <h3>{item.subject}</h3>
-                <p className="homework-description">
-                  {item.homework_text}
-                </p>
+      setSession(data?.session || null);
+      setAuthReady(true);
+    }
 
-                <div className="homework-meta">
-                  <span>
-                    <strong>Due:</strong> {item.due_date}
-                  </span>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
+    initialize();
 
-function EmptyState({ icon, title, message }) {
-  return (
-    <div className="empty-state">
-      <div className="empty-state-icon">{icon}</div>
-      <h3>{title}</h3>
-      <p>{message}</p>
-    </div>
-  );
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (!active) return;
+
+      setSession(newSession);
+      setAuthReady(true);
+
+      if (!newSession) {
+        setProfile(null);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authReady) return;
+
+    if (!session?.user?.id) {
+      setProfile(null);
+      setLoading(false);
+      return;
+    }
+
+    let active = true;
