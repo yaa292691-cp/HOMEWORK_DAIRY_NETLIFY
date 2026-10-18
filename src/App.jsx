@@ -1,415 +1,3 @@
-
-the student dashboard show HD
-
-HOMEWORK DIARY
-Learn • Organize • Achieve
-
-☀️ Light modeLog out
-
-Notice: Your authentication account was created, but saving your profile failed: duplicate key value violates unique constraint "profiles_pkey". Do not register again yet; check the profiles table first.×
-
-?
-
-STUDENT ACCOUNT
-
-
-Class:Section:Roll no: —
-
-STUDENT DASHBOARD
-
-Your homework
-Refresh
-
-Current homework0
-
-Finished / history0
-
-Current HomeworkHistory Homework
-
-No homework here yet
-Your teacher's homework will appear here.
-
-HOMEWORK DIARY
-
-Learn • Organize • Achieve
-
-…
-Your student dashboard shows two connected problems:
-
-The profile was not saved successfully. The error duplicate key value violates unique constraint "profiles_pkey" means a profile with that ID already exists in Supabase. The registration code attempted to insert another profile with the same ID.
-
-The dashboard cannot display the student's details or homework correctly. The profile appears blank, and the homework counts are zero. We need to check whether the existing profile belongs to this account and whether the homework tables and permissions are correct.
-
-Please don't register the account again or delete any Supabase records. We can investigate the existing account first and preserve your data.
-
-Step 1 — Fix the duplicate profile in your registration code
-Open GitHub → HOMEWORK_DAIRY_NETLIFY → src → App.jsx.
-
-Find this code inside handleRegister:
-
-const { error: insertError } = await supabase
-  .from("profiles")
-  .insert(profileData);
-
-Replace it with:
-
-const { error: insertError } = await supabase
-  .from("profiles")
-  .upsert(profileData, { onConflict: "id" });
-
-if (insertError) {
-  throw new Error(
-    `Could not save your profile: ${insertError.message}`
-  );
-}
-
-This allows Supabase to update the profile when the same ID already exists instead of failing on the duplicate key. It also updates the existing profile fields with the submitted registration details, so use it only when those details belong to the same account.
-
-Commit the change and wait for Netlify to deploy it.
-
-Step 2 — Check the existing student profile
-Open Supabase Dashboard and select your project.
-
-Open SQL Editor.
-
-Create a new query.
-
-Paste this SQL and run it:
-
-SELECT
-  id,
-  full_name,
-  email,
-  role,
-  institution_name,
-  class_name,
-  section,
-  group_name,
-  roll_number
-FROM public.profiles
-ORDER BY created_at DESC;
-
-Find the row for your student account. Check whether the name, role, class, section, and roll number are populated. Don't delete any rows.
-
-Step 3 — Check why homework is missing
-Your dashboard currently shows zero homework. This may mean there are no matching assignments, or the query is blocked by Supabase permissions.
-
-In SQL Editor, run:
-
-SELECT
-  id,
-  teacher_id,
-  subject,
-  class_name,
-  section,
-  group_name,
-  due_date,
-  target_type,
-  target_student_id
-FROM public.homework
-ORDER BY created_at DESC;
-
-This lets us check whether assignments exist and whether their class, section, group, and target match the student. If the query returns a permission error, share the error message rather than changing security policies blindly.
-
-Tell me what you find
-Please send me these two results:
-
-Profile: Does your student row show the correct name and class, or are those fields blank?
-
-Homework: Does the query show any assignments?
-
-With those two answers, I can help fix the blank profile and missing homework without unnecessarily changing your working database.
-
-i dont find the line so send me all code
-
-Worked for 1m 41s
-No problem. You don’t need to find that line. For your HOMEWORK DIARY project, we can replace the entire src/App.jsx file instead.
-
-The duplicate-key error means the profile already has a record with the same ID. The code should check for that existing profile and update it safely rather than blindly creating another record. Don’t delete your Supabase users, tables, or homework data.
-
-Complete corrected App.jsx
-
-Includes registration, login, profile repair, teacher/student dashboards, homework, and completion tracking.
-
-Download the complete App.jsx file
-
-Follow these steps
-Download the file above.
-
-Open your GitHub repository: HOMEWORK_DAIRY_NETLIFY.
-
-Open the src folder, then open App.jsx.
-
-Click the pencil icon to edit the file.
-
-Open the downloaded App.jsx on your computer using Notepad or VS Code. Copy all its contents.
-
-Return to GitHub, select all the old code in App.jsx, and replace it with the copied code.
-
-Click Commit changes to save it. Netlify should start rebuilding your website.
-
-Important: This version handles the duplicate-profile situation and provides a profile-completion screen for an existing account whose details are blank. If Supabase blocks the profile update, the screen will show an error; don't delete your account or database.
-
-After Netlify finishes deploying, open your website and tell me what appears on the screen.
-
-4:50:50 PM: Netlify Build                                                 
-4:50:50 PM: ────────────────────────────────────────────────────────────────
-4:50:50 PM: ​
-4:50:50 PM: ❯ Version
-4:50:50 PM:   @netlify/build 37.4.3
-4:50:50 PM: ​
-4:50:50 PM: ❯ Flags
-4:50:50 PM:   accountId: 6ab7a2e5cae56e165b7e9c5d
-4:50:50 PM:   baseRelDir: true
-4:50:50 PM:   buildId: 6ad4b2740d8aaecb76ed4749
-4:50:50 PM:   deployId: 6ad4b2740d8aaecb76ed474b
-4:50:50 PM: ​
-4:50:50 PM: ❯ Current directory
-4:50:50 PM:   /opt/build/repo
-4:50:50 PM: ​
-4:50:50 PM: ❯ Config file
-4:50:50 PM:   /opt/build/repo/netlify.toml
-4:50:50 PM: ​
-4:50:50 PM: ❯ Context
-4:50:50 PM:   production
-4:50:50 PM: ​
-4:50:50 PM: build.command from netlify.toml                               
-4:50:50 PM: ────────────────────────────────────────────────────────────────
-4:50:50 PM: ​
-4:50:50 PM: $ npm run build
-4:50:50 PM: > homework-diary@1.0.0 build
-4:50:50 PM: > vite build
-4:50:51 PM: Failed during stage 'building site': Build script returned non-zero exit code: 2 (https://ntl.fyi/exit-code-2)
-4:50:51 PM: vite v7.3.6 building client environment for production...
-4:50:51 PM: transforming...
-4:50:51 PM: ✓ 5 modules transformed.
-4:50:51 PM: ✗ Build failed in 89ms
-4:50:51 PM: error during build:
-4:50:51 PM: [vite:esbuild] Transform failed with 1 error:
-4:50:51 PM: /opt/build/repo/src/App.jsx:97:0: ERROR: Unexpected end of file
-4:50:51 PM: file: /opt/build/repo/src/App.jsx:97:0
-4:50:51 PM: 
-4:50:51 PM: Unexpected end of file
-4:50:51 PM: 95 |    useEffect(() => {
-4:50:51 PM: 96 |      if (!authReady) return;
-4:50:51 PM: 97 |
-4:50:51 PM:    |  ^
-4:50:51 PM: 
-4:50:51 PM:     at failureErrorWithLog (/opt/build/repo/node_modules/esbuild/lib/main.js:1752:15)
-4:50:51 PM:     at /opt/build/repo/node_modules/esbuild/lib/main.js:1019:50
-4:50:51 PM:     at responseCallbacks.<computed> (/opt/build/repo/node_modules/esbuild/lib/main.js:886:9)
-4:50:51 PM:     at handleIncomingPacket (/opt/build/repo/node_modules/esbuild/lib/main.js:941:12)
-4:50:51 PM:     at Socket.readFromStdout (/opt/build/repo/node_modules/esbuild/lib/main.js:864:7)
-4:50:51 PM:     at Socket.emit (node:events:514:28)
-4:50:51 PM:     at addChunk (node:internal/streams/readable:569:12)
-4:50:51 PM:     at readableAddChunkPushByteMode (node:internal/streams/readable:520:3)
-4:50:51 PM:     at Readable.push (node:internal/streams/readable:400:5)
-4:50:51 PM:     at Pipe.onStreamRead (node:internal/stream_base_commons:194:23)
-4:50:51 PM: ​
-4:50:51 PM: "build.command" failed                                        
-4:50:51 PM: ────────────────────────────────────────────────────────────────
-4:50:51 PM: ​
-4:50:51 PM:   Error message
-4:50:51 PM:   Command failed with exit code 1: npm run build (https://ntl.fyi/exit-code-1)
-4:50:51 PM: ​
-4:50:51 PM:   Error location
-4:50:51 PM:   In build.command from netlify.toml:
-4:50:51 PM:   npm run build
-4:50:51 PM: ​
-4:50:51 PM:   Resolved config
-4:50:51 PM:   build:
-4:50:51 PM:     command: npm run build
-4:50:51 PM:     commandOrigin: config
-4:50:51 PM:     environment:
-4:50:51 PM:       - VITE_SUPABASE_PUBLISHABLE_KEY
-4:50:51 PM:       - VITE_SUPABASE_URL
-4:50:51 PM:     publish: /opt/build/repo/dist
-4:50:51 PM:     publishOrigin: config
-4:50:51 PM:   redirects:
-4:50:51 PM:     - from: /*
-4:50:51 PM:       status: 200
-4:50:51 PM:       to: /index.html
-4:50:51 PM:   redirectsOrigin: config
-4:50:51 PM: Build failed due to a user error: Build script returned non-zero exit code: 2
-4:50:51 PM: Failing build: Failed to build site
-4:50:51 PM: Finished processing build request in 38.584s
-…
-
-Worked for 10s
-Your Netlify log confirms that the deployed src/App.jsx is still incomplete. It ends at line 97, immediately after if (!authReady) return;. This is why the build fails.
-
-Fix it step by step
-Download the complete file here: Download corrected App.jsx
-
-Open your GitHub repository.
-
-Click src → App.jsx.
-
-Click the pencil icon to edit.
-
-Press Ctrl + A to select all the old code.
-
-Open the downloaded file in Notepad. Press Ctrl + A, then Ctrl + C.
-
-Return to GitHub and press Ctrl + V to paste the complete code.
-
-Scroll down and click Commit changes.
-
-Wait for Netlify to deploy again, then check whether the build succeeds.
-
-Important: Do not paste the new code at the bottom of the old code. Replace the entire file. Keep styles.css, src/lib/supabase.js, and your Supabase database unchanged.
-
-If Netlify fails again, send me the new build log, because it may show a different error after this one is fixed.
-
-
-App.jsx
-Code
-4:54:29 PM: Netlify Build                                                 
-4:54:29 PM: ────────────────────────────────────────────────────────────────
-4:54:29 PM: ​
-4:54:29 PM: ❯ Version
-4:54:29 PM:   @netlify/build 37.4.3
-4:54:29 PM: ​
-4:54:29 PM: ❯ Flags
-4:54:29 PM:   accountId: 6ab7a2e5cae56e165b7e9c5d
-4:54:29 PM:   baseRelDir: true
-4:54:29 PM:   buildId: 6ad4b352a51b157ce3269e85
-4:54:29 PM:   deployId: 6ad4b352a51b157ce3269e87
-4:54:29 PM: ​
-4:54:29 PM: ❯ Current directory
-4:54:29 PM:   /opt/build/repo
-4:54:29 PM: ​
-4:54:29 PM: ❯ Config file
-4:54:29 PM:   /opt/build/repo/netlify.toml
-4:54:29 PM: ​
-4:54:29 PM: ❯ Context
-4:54:29 PM:   production
-4:54:29 PM: ​
-4:54:29 PM: build.command from netlify.toml                               
-4:54:29 PM: ────────────────────────────────────────────────────────────────
-4:54:29 PM: ​
-4:54:29 PM: $ npm run build
-4:54:29 PM: > homework-diary@1.0.0 build
-4:54:29 PM: > vite build
-4:54:30 PM: Failed during stage 'building site': Build script returned non-zero exit code: 2 (https://ntl.fyi/exit-code-2)
-4:54:30 PM: vite v7.3.6 building client environment for production...
-4:54:30 PM: transforming...
-4:54:30 PM: ✓ 4 modules transformed.
-4:54:30 PM: ✗ Build failed in 71ms
-4:54:30 PM: error during build:
-4:54:30 PM: [vite:esbuild] Transform failed with 1 error:
-4:54:30 PM: /opt/build/repo/src/App.jsx:97:0: ERROR: Unexpected end of file
-4:54:30 PM: file: /opt/build/repo/src/App.jsx:97:0
-4:54:30 PM: 
-4:54:30 PM: Unexpected end of file
-4:54:30 PM: 95 |    useEffect(() => {
-4:54:30 PM: 96 |      if (!authReady) return;
-4:54:30 PM: 97 |
-4:54:30 PM:    |  ^
-4:54:30 PM: 
-4:54:30 PM:     at failureErrorWithLog (/opt/build/repo/node_modules/esbuild/lib/main.js:1752:15)
-4:54:30 PM:     at /opt/build/repo/node_modules/esbuild/lib/main.js:1019:50
-4:54:30 PM:     at responseCallbacks.<computed> (/opt/build/repo/node_modules/esbuild/lib/main.js:886:9)
-4:54:30 PM:     at handleIncomingPacket (/opt/build/repo/node_modules/esbuild/lib/main.js:941:12)
-4:54:30 PM:     at Socket.readFromStdout (/opt/build/repo/node_modules/esbuild/lib/main.js:864:7)
-4:54:30 PM:     at Socket.emit (node:events:514:28)
-4:54:30 PM:     at addChunk (node:internal/streams/readable:569:12)
-4:54:30 PM:     at readableAddChunkPushByteMode (node:internal/streams/readable:520:3)
-4:54:30 PM:     at Readable.push (node:internal/streams/readable:400:5)
-4:54:30 PM:     at Pipe.onStreamRead (node:internal/stream_base_commons:194:23)
-4:54:30 PM: ​
-4:54:30 PM: "build.command" failed                                        
-4:54:30 PM: ────────────────────────────────────────────────────────────────
-4:54:30 PM: ​
-4:54:30 PM:   Error message
-4:54:30 PM:   Command failed with exit code 1: npm run build (https://ntl.fyi/exit-code-1)
-4:54:30 PM: ​
-4:54:30 PM:   Error location
-4:54:30 PM:   In build.command from netlify.toml:
-4:54:30 PM:   npm run build
-4:54:30 PM: ​
-4:54:30 PM:   Resolved config
-4:54:30 PM:   build:
-4:54:30 PM:     command: npm run build
-4:54:30 PM:     commandOrigin: config
-4:54:30 PM:     environment:
-4:54:30 PM:       - VITE_SUPABASE_PUBLISHABLE_KEY
-4:54:30 PM:       - VITE_SUPABASE_URL
-4:54:30 PM:     publish: /opt/build/repo/dist
-4:54:30 PM:     publishOrigin: config
-4:54:30 PM:   redirects:
-4:54:30 PM:     - from: /*
-4:54:30 PM:       status: 200
-4:54:30 PM:       to: /index.html
-4:54:30 PM:   redirectsOrigin: config
-4:54:30 PM: Build failed due to a user error: Build script returned non-zero exit code: 2
-4:54:30 PM: Failing build: Failed to build site
-4:54:30 PM: Finished processing build request in 11.675s correct it carefully without mistake
-…
-The error is still the same: your GitHub src/App.jsx file ends at line 97 before the code is complete. Netlify cannot build your website until the entire file is replaced.
-
-Please follow these steps carefully. Do not change your Supabase database or environment variables for this error.
-
-Step 1 — Replace the incomplete file
-Use the complete replacement file prepared earlier:
-
-Download the complete App.jsx file
-
-Click the download link above.
-
-Open your GitHub repository: HOMEWORK_DAIRY_NETLIFY.
-
-Open the src folder.
-
-Click App.jsx.
-
-Click the pencil (Edit) icon.
-
-Step 2 — Copy and paste the entire code
-In GitHub's editor, press Ctrl + A to select the old code.
-
-Open the downloaded App.jsx file on your computer using Notepad.
-
-Press Ctrl + A, then Ctrl + C in Notepad.
-
-Return to GitHub and press Ctrl + V.
-
-Check that the pasted code starts with these lines:
-
-import React, { useEffect, useState } from "react";
-import { supabase } from "./lib/supabase";
-import "./styles.css";
-
-6. Scroll to the very bottom. The file should end with:
-
-export default App;
-
-Important: Replace the whole file. Do not paste the new code at the bottom of the old code.
-
-Step 3 — Save and redeploy
-Click Commit changes in GitHub.
-
-Confirm the commit.
-
-Open Netlify Deploys.
-
-Open your dapper-narwhal-3bc356 site.
-
-Wait for the latest deployment to finish.
-
-Your website is ready for testing only after Netlify reports Published.
-
-Step 4 — If it fails again
-Open GitHub → src → App.jsx and check whether the full code was actually saved. If the file is still around 97 lines, the replacement did not take effect.
-
-If the file is complete but Netlify reports a different error, send me the new log. We should fix that specific error next rather than changing several files at once.
-
-
-App.jsx
-Code
-
-
-
 import React, { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import "./styles.css";
@@ -506,3 +94,1659 @@ function App() {
 
   useEffect(() => {
     if (!authReady) return;
+
+    if (!session?.user?.id) {
+      setProfile(null);
+      setLoading(false);
+      return;
+    }
+
+    let active = true;
+
+    async function getProfile() {
+      setLoading(true);
+      setError("");
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", session.user.id)
+        .maybeSingle();
+
+      if (!active) return;
+
+      if (error) {
+        setError("Could not load your profile: " + error.message);
+        setProfile(null);
+      } else if (!data) {
+        setError(
+          "Your account exists, but its profile was not found. Please contact the administrator."
+        );
+        setProfile(null);
+      } else {
+        setProfile(data);
+      }
+
+      setLoading(false);
+    }
+
+    getProfile();
+
+    return () => {
+      active = false;
+    };
+  }, [session?.user?.id, authReady]);
+
+  async function logout() {
+    setError("");
+
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setSession(null);
+    setProfile(null);
+    setPage("login");
+    setSuccess("");
+  }
+
+  function changeTheme() {
+    setTheme((current) => (current === "light" ? "dark" : "light"));
+  }
+
+  return (
+    <div className={`app-shell theme-${theme}`}>
+      <header className="topbar">
+        <a
+          className="brand"
+          href="#home"
+          onClick={(event) => event.preventDefault()}
+          aria-label="HOMEWORK DIARY home"
+        >
+          <span className="brand-mark">HD</span>
+          <span className="brand-copy">
+            <strong>HOMEWORK</strong>
+            <span>DIARY</span>
+          </span>
+        </a>
+
+        <div className="topbar-right">
+          <span className="theme-label">
+            {theme === "light" ? "Light mode" : "Dark mode"}
+          </span>
+
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={changeTheme}
+            aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+            title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+          >
+            <span aria-hidden="true">
+              {theme === "light" ? "☾" : "☀"}
+            </span>
+          </button>
+        </div>
+      </header>
+
+      <main className="page-content">
+        {loading ? (
+          <section className="panel loading-panel">
+            <div className="loading-spinner" />
+            <h2>Getting things ready</h2>
+            <p>Loading your HOMEWORK DIARY...</p>
+          </section>
+        ) : session && profile ? (
+          isProfileIncomplete(profile) ? (
+            <CompleteProfilePage
+              profile={profile}
+              userEmail={session.user.email || profile.email || ""}
+              onSaved={(updatedProfile) => {
+                setProfile(updatedProfile);
+                setError("");
+                setSuccess("Your profile has been saved.");
+              }}
+              setGlobalError={setError}
+            />
+          ) : profile.role === "Teacher" ? (
+            <TeacherDashboard profile={profile} onLogout={logout} />
+          ) : (
+            <StudentDashboard profile={profile} onLogout={logout} />
+          )
+        ) : session && !profile ? (
+          <section className="panel message-panel">
+            <div className="section-icon">!</div>
+            <h2>Profile unavailable</h2>
+            <p className="error-message">
+              {error || "Your profile could not be loaded."}
+            </p>
+            <button className="button button-secondary" onClick={logout}>
+              Log Out
+            </button>
+          </section>
+        ) : page === "register" ? (
+          <RegisterPage
+            onBack={() => {
+              setPage("login");
+              setError("");
+              setSuccess("");
+            }}
+            error={error}
+            success={success}
+            setError={setError}
+            setSuccess={setSuccess}
+          />
+        ) : (
+          <LoginPage
+            onRegister={() => {
+              setPage("register");
+              setError("");
+              setSuccess("");
+            }}
+            error={error}
+            success={success}
+            setError={setError}
+            setSuccess={setSuccess}
+          />
+        )}
+      </main>
+
+      <footer className="site-footer">
+        <span>HOMEWORK DIARY</span>
+        <span>Learn • Organize • Achieve</span>
+      </footer>
+    </div>
+  );
+}
+
+function LoginPage({
+  onRegister,
+  error,
+  success,
+  setError,
+  setSuccess,
+}) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleLogin(event) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    setSubmitting(true);
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (error) setError(error.message);
+    } catch (err) {
+      setError(err.message || "Login failed. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="auth-layout">
+      <div className="welcome-panel">
+        <div className="welcome-badge">
+          <span className="welcome-dot" />
+          Your schoolwork, organized
+        </div>
+
+        <h1>
+          Make every
+          <br />
+          school day <span>count.</span>
+        </h1>
+
+        <p>
+          One simple place for teachers to share homework
+          and students to stay on track.
+        </p>
+
+        <div className="welcome-features">
+          <div className="welcome-feature">
+            <span className="feature-icon">✓</span>
+            <span>Keep homework organized</span>
+          </div>
+          <div className="welcome-feature">
+            <span className="feature-icon">↗</span>
+            <span>Stay on top of due dates</span>
+          </div>
+          <div className="welcome-feature">
+            <span className="feature-icon">◎</span>
+            <span>Track finished assignments</span>
+          </div>
+        </div>
+
+        <div className="welcome-decoration decoration-one" />
+        <div className="welcome-decoration decoration-two" />
+      </div>
+
+      <div className="auth-card">
+        <div className="auth-card-heading">
+          <span className="eyebrow">WELCOME BACK</span>
+          <h2>Log in to your account</h2>
+          <p>Enter your details to continue.</p>
+        </div>
+
+        {error && <div className="alert alert-error">{error}</div>}
+        {success && <div className="alert alert-success">{success}</div>}
+
+        <form onSubmit={handleLogin} className="form-stack">
+          <label className="field">
+            <span>Email address</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              required
+            />
+          </label>
+
+          <label className="field">
+            <span>Password</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Enter your password"
+              autoComplete="current-password"
+              required
+            />
+          </label>
+
+          <button
+            type="submit"
+            className="button button-primary button-full"
+            disabled={submitting}
+          >
+            {submitting ? "Logging in..." : "Log In"}
+            {!submitting && <span aria-hidden="true">→</span>}
+          </button>
+        </form>
+
+        <div className="auth-divider">
+          <span>NEW TO HOMEWORK DIARY?</span>
+        </div>
+
+        <button
+          type="button"
+          className="button button-secondary button-full"
+          onClick={onRegister}
+        >
+          Create New Account
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function RegisterPage({
+  onBack,
+  error,
+  success,
+  setError,
+  setSuccess,
+}) {
+  const [form, setForm] = useState({ ...emptyProfile });
+  const [photo, setPhoto] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  function updateField(event) {
+    const { name, value } = event.target;
+    setForm((previous) => ({ ...previous, [name]: value }));
+  }
+
+  async function handleRegister(event) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    setSubmitting(true);
+
+    try {
+      const email = form.email.trim();
+      const metadata = {
+        role: form.role,
+        full_name: form.full_name.trim(),
+        father_name: form.role === "Student" ? form.father_name.trim() : null,
+        email,
+        age: form.age ? Number(form.age) : null,
+        gender: form.gender || null,
+        institution_type: form.institution_type,
+        institution_name: FIXED_INSTITUTION_NAME,
+        class_name: form.class_name.trim(),
+        section: form.section.trim(),
+        group_name: form.group_name.trim() || null,
+        roll_number:
+          form.role === "Student" ? form.roll_number.trim() || null : null,
+      };
+
+      // Store profile fields in Auth metadata too. If Supabase requires email
+      // confirmation, the database trigger can create the profile without an
+      // authenticated browser session.
+      const { data: authData, error: authError } =
+        await supabase.auth.signUp({
+          email,
+          password: form.password,
+          options: { data: metadata },
+        });
+
+      if (authError) throw authError;
+
+      const user = authData.user;
+
+      if (!user) {
+        throw new Error("Account could not be created. Please try again.");
+      }
+
+      // When email confirmation is enabled, there is no signed-in session yet.
+      // Avoid a browser-side profile upsert that would fail RLS. The profile
+      // trigger should use the metadata above; the user can complete a missing
+      // profile after signing in.
+      if (!authData.session) {
+        setSuccess(
+          "Your account was created. Check your email to confirm it, then log in. Your profile details were included with the account."
+        );
+        return;
+      }
+
+      let photoUrl = null;
+
+      if (photo) {
+        const extension = photo.name.split(".").pop() || "jpg";
+        const filePath = `${user.id}/profile-${Date.now()}.${extension}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("profile-photos")
+          .upload(filePath, photo, {
+            upsert: true,
+            contentType: photo.type || "image/jpeg",
+          });
+
+        if (uploadError) {
+          throw new Error(
+            "Account created, but photo upload failed: " +
+              uploadError.message
+          );
+        }
+
+        const { data: photoData } = supabase.storage
+          .from("profile-photos")
+          .getPublicUrl(filePath);
+
+        photoUrl = photoData.publicUrl;
+      }
+
+      const profileData = {
+        id: user.id,
+        role: form.role,
+        full_name: form.full_name.trim(),
+        father_name:
+          form.role === "Student" ? form.father_name.trim() : null,
+        email,
+        age: form.age ? Number(form.age) : null,
+        gender: form.gender || null,
+        institution_type: form.institution_type,
+        institution_name: FIXED_INSTITUTION_NAME,
+        class_name: form.class_name.trim(),
+        section: form.section.trim(),
+        group_name: form.group_name.trim() || null,
+        roll_number:
+          form.role === "Student"
+            ? form.roll_number.trim() || null
+            : null,
+        photo_url: photoUrl,
+      };
+
+      // A database trigger may already have created this user's profile row.
+      // Upsert updates that same row instead of failing with profiles_pkey.
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .upsert(profileData, { onConflict: "id" });
+
+      if (profileError) {
+        throw new Error(
+          "Your account was created, but the profile could not be saved: " +
+            profileError.message
+        );
+      }
+
+      if (authData.session) {
+        setSuccess(
+          "Your account and profile were created. If your dashboard does not open, log in using your new account."
+        );
+      } else {
+        setSuccess(
+          "Your account was created. Check your email if confirmation is required, then log in."
+        );
+      }
+    } catch (err) {
+      setError(err.message || "Registration failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="register-layout">
+      <div className="register-heading">
+        <span className="eyebrow">GET STARTED</span>
+        <h1>Create your account</h1>
+        <p>Join HOMEWORK DIARY and keep schoolwork organized.</p>
+      </div>
+
+      <div className="auth-card register-card">
+        {error && <div className="alert alert-error">{error}</div>}
+        {success && <div className="alert alert-success">{success}</div>}
+
+        <form onSubmit={handleRegister} className="form-stack">
+          <div className="form-grid">
+            <label className="field">
+              <span>Account type</span>
+              <select
+                name="role"
+                value={form.role}
+                onChange={updateField}
+                required
+              >
+                <option value="Student">Student</option>
+                <option value="Teacher">Teacher</option>
+              </select>
+            </label>
+
+            <label className="field">
+              <span>Full name</span>
+              <input
+                name="full_name"
+                value={form.full_name}
+                onChange={updateField}
+                placeholder="Enter full name"
+                required
+              />
+            </label>
+
+            {form.role === "Student" && (
+              <label className="field">
+                <span>Father name</span>
+                <input
+                  name="father_name"
+                  value={form.father_name}
+                  onChange={updateField}
+                  placeholder="Enter father name"
+                  required
+                />
+              </label>
+            )}
+
+            <label className="field">
+              <span>Email address</span>
+              <input
+                type="email"
+                name="email"
+                value={form.email}
+                onChange={updateField}
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+              />
+            </label>
+
+            <label className="field">
+              <span>Password</span>
+              <input
+                type="password"
+                name="password"
+                value={form.password}
+                onChange={updateField}
+                placeholder="At least 6 characters"
+                minLength={6}
+                autoComplete="new-password"
+                required
+              />
+            </label>
+
+            <label className="field">
+              <span>Age</span>
+              <input
+                type="number"
+                name="age"
+                value={form.age}
+                onChange={updateField}
+                min="1"
+                max="120"
+                placeholder="Your age"
+              />
+            </label>
+
+            <label className="field">
+              <span>Gender</span>
+              <select
+                name="gender"
+                value={form.gender}
+                onChange={updateField}
+              >
+                <option value="">Select gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </label>
+
+            <label className="field">
+              <span>Institution type</span>
+              <select
+                name="institution_type"
+                value={form.institution_type}
+                onChange={updateField}
+                required
+              >
+                <option value="">Select institution type</option>
+                <option value="Primary School">Primary School</option>
+                <option value="Secondary School">Secondary School</option>
+                <option value="High School">High School</option>
+                <option value="College">College</option>
+              </select>
+            </label>
+
+            <label className="field field-wide">
+              <span>Institution name</span>
+              <input
+                name="institution_name"
+                value={FIXED_INSTITUTION_NAME}
+                readOnly
+                aria-readonly="true"
+                required
+              />
+              <small>Your institution is fixed for this school.</small>
+            </label>
+
+            <label className="field">
+              <span>Class</span>
+              <input
+                name="class_name"
+                value={form.class_name}
+                onChange={updateField}
+                placeholder="Enter class"
+                required
+              />
+            </label>
+
+            <label className="field">
+              <span>Section</span>
+              <input
+                name="section"
+                value={form.section}
+                onChange={updateField}
+                placeholder="Enter section"
+                required
+              />
+            </label>
+
+            {(form.institution_type === "High School" ||
+              form.institution_type === "College") && (
+              <label className="field">
+                <span>Group</span>
+                <select
+                  name="group_name"
+                  value={form.group_name}
+                  onChange={updateField}
+                >
+                  <option value="">Select group</option>
+                  {GROUP_OPTIONS.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            {form.role === "Student" && (
+              <label className="field">
+                <span>Roll number</span>
+                <input
+                  name="roll_number"
+                  value={form.roll_number}
+                  onChange={updateField}
+                  placeholder="Enter roll number"
+                  required
+                />
+              </label>
+            )}
+
+            <label className="field field-wide">
+              <span>Profile photo</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(event) =>
+                  setPhoto(event.target.files?.[0] || null)
+                }
+              />
+              <small>Choose a clear image for your profile.</small>
+            </label>
+          </div>
+
+          <button
+            type="submit"
+            className="button button-primary button-full"
+            disabled={submitting}
+          >
+            {submitting ? "Creating account..." : "Create Account"}
+            {!submitting && <span aria-hidden="true">→</span>}
+          </button>
+        </form>
+
+        <button
+          type="button"
+          className="button button-ghost button-full"
+          onClick={onBack}
+        >
+          ← Back to Login
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function isProfileIncomplete(profile) {
+  if (!profile) return true;
+  const commonMissing =
+    !String(profile.full_name || "").trim() ||
+    !String(profile.institution_type || "").trim() ||
+    !String(profile.class_name || "").trim() ||
+    !String(profile.section || "").trim();
+  if (commonMissing) return true;
+  if (profile.role === "Student") {
+    return (
+      !String(profile.father_name || "").trim() ||
+      !String(profile.roll_number || "").trim()
+    );
+  }
+  return false;
+}
+
+function CompleteProfilePage({ profile, userEmail, onSaved, setGlobalError }) {
+  const [form, setForm] = useState({
+    role: profile.role === "Teacher" ? "Teacher" : "Student",
+    full_name: profile.full_name || "",
+    father_name: profile.father_name || "",
+    email: profile.email || userEmail || "",
+    age: profile.age == null ? "" : String(profile.age),
+    gender: profile.gender || "",
+    institution_type: profile.institution_type || "",
+    class_name: profile.class_name || "",
+    section: profile.section || "",
+    group_name: profile.group_name || "",
+    roll_number: profile.roll_number || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  function updateField(event) {
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  async function saveProfile(event) {
+    event.preventDefault();
+    setError("");
+    setGlobalError("");
+
+    if (!form.full_name.trim() || !form.institution_type || !form.class_name.trim() || !form.section.trim()) {
+      setError("Please complete your name, institution type, class, and section.");
+      return;
+    }
+    if (form.role === "Student" && (!form.father_name.trim() || !form.roll_number.trim())) {
+      setError("Students must enter father name and roll number.");
+      return;
+    }
+    if ((form.institution_type === "High School" || form.institution_type === "College") && !form.group_name) {
+      setError("Please select your group.");
+      return;
+    }
+
+    setSaving(true);
+    const updateData = {
+      role: form.role,
+      full_name: form.full_name.trim(),
+      father_name: form.role === "Student" ? form.father_name.trim() : null,
+      email: (form.email || userEmail).trim(),
+      age: form.age ? Number(form.age) : null,
+      gender: form.gender || null,
+      institution_type: form.institution_type,
+      institution_name: FIXED_INSTITUTION_NAME,
+      class_name: form.class_name.trim(),
+      section: form.section.trim(),
+      group_name: form.institution_type === "High School" || form.institution_type === "College" ? (form.group_name || null) : null,
+      roll_number: form.role === "Student" ? form.roll_number.trim() : null,
+    };
+
+    const { data, error: updateError } = await supabase
+      .from("profiles")
+      .update(updateData)
+      .eq("id", profile.id)
+      .select("*")
+      .maybeSingle();
+
+    if (updateError) {
+      setError("Could not update your existing profile: " + updateError.message);
+    } else if (!data) {
+      setError("Your profile was not updated. Please check that your Supabase profiles table allows users to update their own profile row.");
+    } else {
+      onSaved(data);
+    }
+    setSaving(false);
+  }
+
+  return (
+    <section className="register-layout">
+      <div className="register-heading">
+        <span className="eyebrow">ONE-TIME SETUP</span>
+        <h1>Complete your profile</h1>
+        <p>Your account already exists. Fill in these details to finish setting up your HOMEWORK DIARY profile. You do not need to register again.</p>
+      </div>
+      <div className="auth-card register-card">
+        {error && <div className="alert alert-error">{error}</div>}
+        <form onSubmit={saveProfile} className="form-stack">
+          <div className="form-grid">
+            <label className="field">
+              <span>Account type</span>
+              <select name="role" value={form.role} onChange={updateField} required>
+                <option value="Student">Student</option>
+                <option value="Teacher">Teacher</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Full name</span>
+              <input name="full_name" value={form.full_name} onChange={updateField} required />
+            </label>
+            {form.role === "Student" && (
+              <label className="field">
+                <span>Father name</span>
+                <input name="father_name" value={form.father_name} onChange={updateField} required />
+              </label>
+            )}
+            <label className="field">
+              <span>Email address</span>
+              <input type="email" value={form.email} readOnly aria-readonly="true" />
+            </label>
+            <label className="field">
+              <span>Age</span>
+              <input type="number" name="age" value={form.age} onChange={updateField} min="1" max="120" />
+            </label>
+            <label className="field">
+              <span>Gender</span>
+              <select name="gender" value={form.gender} onChange={updateField}>
+                <option value="">Select gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Institution type</span>
+              <select name="institution_type" value={form.institution_type} onChange={updateField} required>
+                <option value="">Select institution type</option>
+                <option value="Primary School">Primary School</option>
+                <option value="Secondary School">Secondary School</option>
+                <option value="High School">High School</option>
+                <option value="College">College</option>
+              </select>
+            </label>
+            <label className="field field-wide">
+              <span>Institution name</span>
+              <input value={FIXED_INSTITUTION_NAME} readOnly aria-readonly="true" />
+            </label>
+            <label className="field">
+              <span>Class</span>
+              <input name="class_name" value={form.class_name} onChange={updateField} required />
+            </label>
+            <label className="field">
+              <span>Section</span>
+              <input name="section" value={form.section} onChange={updateField} required />
+            </label>
+            {(form.institution_type === "High School" || form.institution_type === "College") && (
+              <label className="field">
+                <span>Group</span>
+                <select name="group_name" value={form.group_name} onChange={updateField} required>
+                  <option value="">Select group</option>
+                  {GROUP_OPTIONS.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+              </label>
+            )}
+            {form.role === "Student" && (
+              <label className="field">
+                <span>Roll number</span>
+                <input name="roll_number" value={form.roll_number} onChange={updateField} required />
+              </label>
+            )}
+          </div>
+          <button type="submit" className="button button-primary button-full" disabled={saving}>
+            {saving ? "Saving profile..." : "Save Profile and Continue"}
+          </button>
+        </form>
+      </div>
+    </section>
+  );
+}
+
+function ProfileCard({ profile, onLogout }) {
+  const isStudent = profile.role === "Student";
+
+  return (
+    <section className="profile-banner">
+      <div className="profile-main">
+        {profile.photo_url ? (
+          <img
+            className="profile-photo"
+            src={profile.photo_url}
+            alt={`${profile.full_name}'s profile`}
+          />
+        ) : (
+          <div className="profile-photo profile-placeholder">
+            {profile.full_name?.charAt(0)?.toUpperCase() || "?"}
+          </div>
+        )}
+
+        <div className="profile-identity">
+          <span className="eyebrow">
+            {isStudent ? "STUDENT PROFILE" : "TEACHER PROFILE"}
+          </span>
+          <h2>{profile.full_name}</h2>
+          <p>{profile.institution_name}</p>
+        </div>
+      </div>
+
+      <div className="profile-details">
+        {isStudent && (
+          <div className="profile-detail">
+            <span>Father name</span>
+            <strong>{profile.father_name || "—"}</strong>
+          </div>
+        )}
+
+        <div className="profile-detail">
+          <span>Class</span>
+          <strong>{profile.class_name || "—"}</strong>
+        </div>
+
+        <div className="profile-detail">
+          <span>Section</span>
+          <strong>{profile.section || "—"}</strong>
+        </div>
+
+        {isStudent && (
+          <div className="profile-detail">
+            <span>Roll number</span>
+            <strong>{profile.roll_number || "—"}</strong>
+          </div>
+        )}
+      </div>
+
+      <button
+        className="button button-secondary logout-button"
+        onClick={onLogout}
+      >
+        Log Out
+      </button>
+    </section>
+  );
+}
+
+function TeacherDashboard({ profile, onLogout }) {
+  const [students, setStudents] = useState([]);
+  const [selectedClass, setSelectedClass] = useState(profile.class_name || "");
+  const [selectedSection, setSelectedSection] = useState(profile.section || "");
+  const [homeworkList, setHomeworkList] = useState([]);
+  const [completions, setCompletions] = useState([]);
+  const [subject, setSubject] = useState("");
+  const [homeworkText, setHomeworkText] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [targetType, setTargetType] = useState("class");
+  const [targetStudentId, setTargetStudentId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    loadTeacherData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.id]);
+
+  async function loadTeacherData() {
+    setLoading(true);
+    setError("");
+
+    const { data: studentData, error: studentError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("role", "Student");
+
+    if (studentError) {
+      setError("Could not load students: " + studentError.message);
+      setLoading(false);
+      return;
+    }
+
+    // Match institution names without case/extra-space differences.
+    // Keep students from all classes at this institution in memory;
+    // selected class and section determine recipients below.
+    const sameInstitutionStudents = (studentData || []).filter((student) =>
+      normalizeText(student.institution_name) ===
+      normalizeText(profile.institution_name)
+    );
+    setStudents(sameInstitutionStudents);
+
+    const { data: homeworkData, error: homeworkError } = await supabase
+      .from("homework")
+      .select("*")
+      .eq("teacher_id", profile.id)
+      .order("created_at", { ascending: false });
+
+    if (homeworkError) {
+      setError("Could not load homework: " + homeworkError.message);
+      setLoading(false);
+      return;
+    }
+
+    setHomeworkList(homeworkData || []);
+
+    const homeworkIds = (homeworkData || []).map((item) => item.id);
+
+    if (homeworkIds.length) {
+      const { data: completionData, error: completionError } =
+        await supabase
+          .from("homework_completions")
+          .select("*")
+          .in("homework_id", homeworkIds);
+
+      if (completionError) {
+        setError(
+          "Could not load finished homework: " + completionError.message
+        );
+      } else {
+        setCompletions(completionData || []);
+      }
+    } else {
+      setCompletions([]);
+    }
+
+    setLoading(false);
+  }
+
+  async function sendHomework(event) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (targetType === "student" && !targetStudentId) {
+      setError("Please select a student.");
+      return;
+    }
+
+    if (!selectedClass.trim() || !selectedSection.trim()) {
+      setError("Please enter the class and section for this homework.");
+      return;
+    }
+
+    if (!subject.trim() || !homeworkText.trim() || !dueDate) {
+      setError("Please enter the subject, homework details, and due date.");
+      return;
+    }
+
+    if (targetType === "student" && !matchingStudents.some((student) => student.id === targetStudentId)) {
+      setError("Please select a student from the selected class and section.");
+      return;
+    }
+
+    setSending(true);
+
+    // These field names match your existing Supabase homework table.
+    const newHomework = {
+      teacher_id: profile.id,
+      recipient_institution_name: profile.institution_name,
+      recipient_class_name: selectedClass.trim(),
+      recipient_section: selectedSection.trim(),
+      recipient_group_name: profile.group_name || null,
+      subject: subject.trim(),
+      homework_text: homeworkText.trim(),
+      due_date: dueDate,
+      recipient_type: targetType,
+      recipient_student_id:
+        targetType === "student" ? targetStudentId : null,
+    };
+
+    const { error: insertError } = await supabase
+      .from("homework")
+      .insert(newHomework);
+
+    if (insertError) {
+      setError("Could not send homework: " + insertError.message);
+    } else {
+      setSuccess("Homework sent successfully!");
+      setSubject("");
+      setHomeworkText("");
+      setDueDate("");
+      setTargetType("class");
+      setTargetStudentId("");
+      await loadTeacherData();
+    }
+
+    setSending(false);
+  }
+
+  const matchingStudents = students.filter((student) => {
+    if (
+      normalizeText(student.class_name) !== normalizeText(selectedClass) ||
+      normalizeText(student.section) !== normalizeText(selectedSection)
+    ) {
+      return false;
+    }
+
+    if (
+      profile.institution_type === "High School" ||
+      profile.institution_type === "College"
+    ) {
+      return normalizeText(student.group_name) === normalizeText(profile.group_name);
+    }
+
+    return true;
+  });
+
+  function getStudentName(studentId) {
+    return (
+      students.find((student) => student.id === studentId)?.full_name ||
+      "Student"
+    );
+  }
+
+  const finishedCount = completions.length;
+
+  return (
+    <div className="dashboard">
+      <ProfileCard profile={profile} onLogout={onLogout} />
+
+      <div className="dashboard-heading">
+        <div>
+          <span className="eyebrow">YOUR WORKSPACE</span>
+          <h1>Teacher Dashboard</h1>
+          <p>Share assignments and follow student progress.</p>
+        </div>
+      </div>
+
+      <div className="stats-grid">
+        <div className="stat-card">
+          <span className="stat-icon stat-blue">▤</span>
+          <div>
+            <span className="stat-label">Homework sent</span>
+            <strong>{homeworkList.length}</strong>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <span className="stat-icon stat-green">✓</span>
+          <div>
+            <span className="stat-label">Finished entries</span>
+            <strong>{finishedCount}</strong>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <span className="stat-icon stat-violet">♙</span>
+          <div>
+            <span className="stat-label">Matching students</span>
+            <strong>{matchingStudents.length}</strong>
+          </div>
+        </div>
+      </div>
+
+      <section className="panel">
+        <div className="section-heading">
+          <div className="section-icon">＋</div>
+          <div>
+            <h2>Send Homework</h2>
+            <p>Create an assignment for your class or one student.</p>
+          </div>
+        </div>
+
+        {error && <div className="alert alert-error">{error}</div>}
+        {success && <div className="alert alert-success">{success}</div>}
+
+        <form onSubmit={sendHomework} className="form-stack">
+          <div className="form-grid">
+            <label className="field">
+              <span>Class to teach</span>
+              <input
+                value={selectedClass}
+                onChange={(event) => {
+                  setSelectedClass(event.target.value);
+                  setTargetStudentId("");
+                }}
+                placeholder="Enter class"
+                required
+              />
+            </label>
+
+            <label className="field">
+              <span>Section</span>
+              <input
+                value={selectedSection}
+                onChange={(event) => {
+                  setSelectedSection(event.target.value);
+                  setTargetStudentId("");
+                }}
+                placeholder="Enter section"
+                required
+              />
+            </label>
+
+            <label className="field">
+              <span>Subject</span>
+              <input
+                value={subject}
+                onChange={(event) => setSubject(event.target.value)}
+                placeholder="e.g. Mathematics"
+                required
+              />
+            </label>
+
+            <label className="field">
+              <span>Due date</span>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(event) => setDueDate(event.target.value)}
+                min={new Date().toLocaleDateString("en-CA")}
+                required
+              />
+            </label>
+
+            <label className="field field-wide">
+              <span>Homework instructions</span>
+              <textarea
+                value={homeworkText}
+                onChange={(event) => setHomeworkText(event.target.value)}
+                placeholder="Write the homework details..."
+                rows={4}
+                required
+              />
+            </label>
+
+            <label className="field">
+              <span>Send to</span>
+              <select
+                value={targetType}
+                onChange={(event) => {
+                  setTargetType(event.target.value);
+                  setTargetStudentId("");
+                }}
+              >
+                <option value="class">Entire Matching Class</option>
+                <option value="student">Specific Student</option>
+              </select>
+            </label>
+
+            {targetType === "student" && (
+              <label className="field">
+                <span>Select student</span>
+                <select
+                  value={targetStudentId}
+                  onChange={(event) =>
+                    setTargetStudentId(event.target.value)
+                  }
+                  required
+                >
+                  <option value="">Choose a student</option>
+                  {matchingStudents.map((student) => (
+                    <option key={student.id} value={student.id}>
+                      {student.full_name}
+                      {student.roll_number
+                        ? ` — Roll ${student.roll_number}`
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+
+                {matchingStudents.length === 0 && (
+                  <small>No matching students were found for this class and section.</small>
+                )}
+              </label>
+            )}
+          </div>
+
+          <div className="form-actions">
+            <button
+              type="submit"
+              className="button button-primary"
+              disabled={sending}
+            >
+              {sending ? "Sending..." : "Send Homework"}
+              {!sending && <span aria-hidden="true">→</span>}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <div className="section-icon">▤</div>
+          <div>
+            <h2>Sent Homework</h2>
+            <p>Assignments you have shared with students.</p>
+          </div>
+        </div>
+
+        {loading ? (
+          <p className="empty-state">Loading homework...</p>
+        ) : homeworkList.length === 0 ? (
+          <EmptyState
+            icon="▤"
+            title="No homework yet"
+            message="Your assignments will appear here after you send them."
+          />
+        ) : (
+          <div className="homework-list">
+            {homeworkList.map((item) => (
+              <article className="homework-card" key={item.id}>
+                <div className="homework-card-top">
+                  <span className="subject-tag">{item.subject}</span>
+                  <span className="status-pill status-blue">
+                    {item.recipient_type === "student"
+                      ? "Specific student"
+                      : "Whole class"}
+                  </span>
+                </div>
+
+                <h3>{item.subject}</h3>
+                <p className="homework-description">
+                  {item.homework_text}
+                </p>
+
+                <div className="homework-meta">
+                  <span>
+                    <strong>Due:</strong> {item.due_date}
+                  </span>
+                  <span>
+                    <strong>Sent to:</strong>{" "}
+                    {item.recipient_type === "student"
+                      ? getStudentName(item.recipient_student_id)
+                      : "Entire Matching Class"}
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <div className="section-icon section-icon-green">✓</div>
+          <div>
+            <h2>Finished Homework</h2>
+            <p>See which students have completed their assignments.</p>
+          </div>
+        </div>
+
+        {completions.length === 0 ? (
+          <EmptyState
+            icon="✓"
+            title="Nothing finished yet"
+            message="Completed homework will appear here."
+          />
+        ) : (
+          <div className="homework-list">
+            {completions.map((completion) => {
+              const item = homeworkList.find(
+                (homework) => homework.id === completion.homework_id
+              );
+
+              const student = students.find(
+                (entry) => entry.id === completion.student_id
+              );
+
+              if (!item) return null;
+
+              return (
+                <article className="homework-card" key={completion.id}>
+                  <div className="homework-card-top">
+                    <span className="subject-tag">{item.subject}</span>
+                    <span className="status-pill status-green">
+                      ✓ Finished
+                    </span>
+                  </div>
+
+                  <h3>{item.subject}</h3>
+                  <p className="homework-description">
+                    {item.homework_text}
+                  </p>
+
+                  <div className="completion-student">
+                    {student?.photo_url ? (
+                      <img src={student.photo_url} alt="" />
+                    ) : (
+                      <span className="mini-avatar">
+                        {student?.full_name?.charAt(0) || "S"}
+                      </span>
+                    )}
+
+                    <div>
+                      <strong>{student?.full_name || "Student"}</strong>
+                      <small>
+                        {student?.roll_number
+                          ? `Roll number: ${student.roll_number}`
+                          : "Student"}
+                      </small>
+                    </div>
+                  </div>
+
+                  {completion.completed_at && (
+                    <p className="completion-date">
+                      Finished{" "}
+                      {new Date(completion.completed_at).toLocaleString()}
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function StudentDashboard({ profile, onLogout }) {
+  const [homeworkList, setHomeworkList] = useState([]);
+  const [completions, setCompletions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [workingId, setWorkingId] = useState(null);
+
+  useEffect(() => {
+    loadStudentData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.id]);
+
+  async function loadStudentData() {
+    setLoading(true);
+    setError("");
+
+    const { data: allHomework, error: homeworkError } = await supabase
+      .from("homework")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (homeworkError) {
+      setError("Could not load homework: " + homeworkError.message);
+      setLoading(false);
+      return;
+    }
+
+    // Use the actual recipient_* column names from Supabase.
+    const matchingHomework = (allHomework || []).filter((item) => {
+      if (
+        normalizeText(item.recipient_institution_name) !==
+          normalizeText(profile.institution_name) ||
+        normalizeText(item.recipient_class_name) !==
+          normalizeText(profile.class_name) ||
+        normalizeText(item.recipient_section) !==
+          normalizeText(profile.section)
+      ) {
+        return false;
+      }
+
+      if (
+        profile.institution_type === "High School" ||
+        profile.institution_type === "College"
+      ) {
+        if (
+          normalizeText(item.recipient_group_name) !==
+          normalizeText(profile.group_name)
+        ) {
+          return false;
+        }
+      }
+
+      if (
+        item.recipient_type === "student" &&
+        item.recipient_student_id !== profile.id
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+
+    setHomeworkList(matchingHomework);
+
+    const ids = matchingHomework.map((item) => item.id);
+
+    if (ids.length) {
+      const { data: completionData, error: completionError } =
+        await supabase
+          .from("homework_completions")
+          .select("*")
+          .eq("student_id", profile.id)
+          .in("homework_id", ids);
+
+      if (completionError) {
+        setError(
+          "Could not load homework history: " + completionError.message
+        );
+      } else {
+        setCompletions(completionData || []);
+      }
+    } else {
+      setCompletions([]);
+    }
+
+    setLoading(false);
+  }
+
+  function isFinished(homeworkId) {
+    return completions.some((item) => item.homework_id === homeworkId);
+  }
+
+  async function finishHomework(item) {
+    if (isFinished(item.id)) return;
+
+    setError("");
+    setWorkingId(item.id);
+
+    const { data, error: completionError } = await supabase
+      .from("homework_completions")
+      .insert({
+        homework_id: item.id,
+        student_id: profile.id,
+        completed_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (completionError) {
+      setError(
+        "Could not mark homework as finished: " + completionError.message
+      );
+    } else {
+      setCompletions((previous) => [...previous, data]);
+    }
+
+    setWorkingId(null);
+  }
+
+  const today = new Date().toLocaleDateString("en-CA");
+
+  const activeHomework = homeworkList.filter(
+    (item) => !isFinished(item.id) && item.due_date >= today
+  );
+
+  const historyHomework = homeworkList.filter(
+    (item) => isFinished(item.id) || item.due_date < today
+  );
+
+  return (
+    <div className="dashboard">
+      <ProfileCard profile={profile} onLogout={onLogout} />
+
+      <div className="dashboard-heading">
+        <div>
+          <span className="eyebrow">YOUR LEARNING SPACE</span>
+          <h1>Student Dashboard</h1>
+          <p>Keep up with your assignments, one task at a time.</p>
+        </div>
+      </div>
+
+      <div className="stats-grid stats-grid-student">
+        <div className="stat-card">
+          <span className="stat-icon stat-blue">▤</span>
+          <div>
+            <span className="stat-label">Active homework</span>
+            <strong>{activeHomework.length}</strong>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <span className="stat-icon stat-green">✓</span>
+          <div>
+            <span className="stat-label">Finished</span>
+            <strong>{completions.length}</strong>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <span className="stat-icon stat-violet">◷</span>
+          <div>
+            <span className="stat-label">History items</span>
+            <strong>{historyHomework.length}</strong>
+          </div>
+        </div>
+      </div>
+
+      <section className="panel">
+        <div className="section-heading">
+          <div className="section-icon">▤</div>
+          <div>
+            <h2>My Homework</h2>
+            <p>Complete these assignments before their due dates.</p>
+          </div>
+        </div>
+
+        {error && <div className="alert alert-error">{error}</div>}
+
+        {loading ? (
+          <p className="empty-state">Loading homework...</p>
+        ) : activeHomework.length === 0 ? (
+          <EmptyState
+            icon="✓"
+            title="You're all caught up"
+            message="There is no active homework for you right now."
+          />
+        ) : (
+          <div className="homework-list">
+            {activeHomework.map((item) => (
+              <article className="homework-card" key={item.id}>
+                <div className="homework-card-top">
+                  <span className="subject-tag">{item.subject}</span>
+                  <span className="status-pill status-blue">To do</span>
+                </div>
+
+                <h3>{item.subject}</h3>
+                <p className="homework-description">
+                  {item.homework_text}
+                </p>
+
+                <div className="homework-meta">
+                  <span>
+                    <strong>Due:</strong> {item.due_date}
+                  </span>
+                </div>
+
+                <div className="homework-card-actions">
+                  <button
+                    className="button button-primary"
+                    onClick={() => finishHomework(item)}
+                    disabled={workingId === item.id}
+                  >
+                    {workingId === item.id ? "Saving..." : "✓ Finished"}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <div className="section-icon section-icon-green">◷</div>
+          <div>
+            <h2>History Homework</h2>
+            <p>Review finished and past-due assignments.</p>
+          </div>
+        </div>
+
+        {loading ? (
+          <p className="empty-state">Loading history...</p>
+        ) : historyHomework.length === 0 ? (
+          <EmptyState
+            icon="◷"
+            title="Your history is empty"
+            message="Finished or past-due assignments will appear here."
+          />
+        ) : (
+          <div className="homework-list">
+            {historyHomework.map((item) => (
+              <article className="homework-card history-card" key={item.id}>
+                <div className="homework-card-top">
+                  <span className="subject-tag">{item.subject}</span>
+                  <span
+                    className={`status-pill ${
+                      isFinished(item.id) ? "status-green" : "status-muted"
+                    }`}
+                  >
+                    {isFinished(item.id) ? "✓ Finished" : "Past due"}
+                  </span>
+                </div>
+
+                <h3>{item.subject}</h3>
+                <p className="homework-description">
+                  {item.homework_text}
+                </p>
+
+                <div className="homework-meta">
+                  <span>
+                    <strong>Due:</strong> {item.due_date}
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function EmptyState({ icon, title, message }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-state-icon">{icon}</div>
+      <h3>{title}</h3>
+      <p>{message}</p>
+    </div>
+  );
+}
+
+export default App;
