@@ -870,8 +870,12 @@ function CompleteProfilePage({ profile, userEmail, onSaved, setGlobalError }) {
     setError("");
     setGlobalError("");
 
-    if (!form.full_name.trim() || !form.institution_type || !form.class_name.trim() || !form.section.trim()) {
-      setError("Please complete your name, institution type, class, and section.");
+    if (!form.full_name.trim() || !form.email.trim() || !form.institution_type || !form.class_name.trim() || !form.section.trim()) {
+      setError("Please complete your name, email address, institution type, class, and section.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      setError("Please enter a valid email address.");
       return;
     }
     if (form.role === "Student" && (!form.father_name.trim() || !form.roll_number.trim())) {
@@ -885,8 +889,8 @@ function CompleteProfilePage({ profile, userEmail, onSaved, setGlobalError }) {
 
     setSaving(true);
     const updateData = {
-      // Never let profile completion change a user's permission role.
-      role: profile.role === "Teacher" ? "Teacher" : "Student",
+      // Save the account type explicitly selected by the user during setup.
+      role: form.role === "Teacher" ? "Teacher" : "Student",
       full_name: form.full_name.trim(),
       father_name: form.role === "Student" ? form.father_name.trim() : null,
       email: form.email.trim(),
@@ -930,8 +934,11 @@ function CompleteProfilePage({ profile, userEmail, onSaved, setGlobalError }) {
           <div className="form-grid">
             <label className="field">
               <span>Account type</span>
-              <input value={profile.role === "Teacher" ? "Teacher" : "Student"} readOnly aria-readonly="true" />
-              <small>Account type cannot be changed from profile setup.</small>
+              <select name="role" value={form.role} onChange={updateField} required>
+                <option value="Student">Student</option>
+                <option value="Teacher">Teacher</option>
+              </select>
+              <small>Select whether this profile is for a student or teacher.</small>
             </label>
             <label className="field">
               <span>Full name</span>
