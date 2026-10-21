@@ -889,7 +889,7 @@ function CompleteProfilePage({ profile, userEmail, onSaved, setGlobalError }) {
       role: profile.role === "Teacher" ? "Teacher" : "Student",
       full_name: form.full_name.trim(),
       father_name: form.role === "Student" ? form.father_name.trim() : null,
-      email: (form.email || userEmail).trim(),
+      email: form.email.trim(),
       age: form.age ? Number(form.age) : null,
       gender: form.gender || null,
       institution_type: form.institution_type,
@@ -945,7 +945,16 @@ function CompleteProfilePage({ profile, userEmail, onSaved, setGlobalError }) {
             )}
             <label className="field">
               <span>Email address</span>
-              <input type="email" value={form.email} readOnly aria-readonly="true" />
+              <input
+                type="email"
+                name="email"
+                value={form.email}
+                onChange={updateField}
+                placeholder="Enter your email address"
+                autoComplete="email"
+                required
+              />
+              <small>Enter the email address you want saved in your profile.</small>
             </label>
             <label className="field">
               <span>Age</span>
