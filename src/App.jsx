@@ -4,6 +4,25 @@ import "./styles.css";
 
 const FIXED_INSTITUTION_NAME = "PUBLIC SCHOOL AND COLLEGE SKARDU";
 const GROUP_OPTIONS = ["COMPUTER SCIENCE", "PREMEDICAL", "ENGINEERING"];
+const CLASS_OPTIONS = [
+  "PLAY GROUP", "NURSERY", "PREP", "ONE", "TWO", "THREE", "FOUR",
+  "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "1st YEAR", "2nd YEAR",
+];
+const LETTER_SECTIONS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const COLOR_SECTIONS = [
+  "RED", "GREEN", "BLUE", "PINK", "YELLOW", "ORANGE", "PURPLE",
+  "WHITE", "BLACK", "BROWN", "GREY", "GRAY",
+];
+
+function getSectionType(section) {
+  const value = String(section || "").trim().toUpperCase();
+  if (!value || LETTER_SECTIONS.includes(value)) return "letters";
+  return "colors";
+}
+
+function getClassOption(className) {
+  return CLASS_OPTIONS.find((name) => normalizeText(name) === normalizeText(className)) || "";
+}
 
 const emptyProfile = {
   role: "Student",
@@ -17,6 +36,7 @@ const emptyProfile = {
   institution_name: FIXED_INSTITUTION_NAME,
   class_name: "",
   section: "",
+  section_type: "letters",
   group_name: "",
   roll_number: "",
 };
@@ -509,17 +529,51 @@ function RegisterPage({
         photo_url: photoUrl,
       };
 
-      // A database trigger may already have created this user's profile row.
-      // Upsert updates that same row instead of failing with profiles_pkey.
-      const { error: profileError } = await supabase
+      // Prefer updating a row that an Auth database trigger may already have
+      // created. Only insert when no row exists. If a trigger creates the row
+      // between the check and insert, retry the update after a duplicate-key
+      // response instead of leaving the profile blank.
+      const { data: updatedRows, error: updateProfileError } = await supabase
         .from("profiles")
-        .upsert(profileData, { onConflict: "id" });
+        .update(profileData)
+        .eq("id", user.id)
+        .select("id");
 
-      if (profileError) {
+      if (updateProfileError) {
         throw new Error(
-          "Your account was created, but the profile could not be saved: " +
-            profileError.message
+          "Your account was created, but updating its profile failed: " +
+            updateProfileError.message
         );
+      }
+
+      if (!updatedRows || updatedRows.length === 0) {
+        const { error: insertProfileError } = await supabase
+          .from("profiles")
+          .insert(profileData);
+
+        if (insertProfileError) {
+          // A trigger may have inserted the row just before our insert.
+          // Retry as an update only for a duplicate-key error.
+          if (insertProfileError.code === "23505") {
+            const { data: retryRows, error: retryError } = await supabase
+              .from("profiles")
+              .update(profileData)
+              .eq("id", user.id)
+              .select("id");
+
+            if (retryError || !retryRows || retryRows.length === 0) {
+              throw new Error(
+                "Your account was created, but its existing profile could not be updated. " +
+                  (retryError?.message || insertProfileError.message)
+              );
+            }
+          } else {
+            throw new Error(
+              "Your account was created, but the profile could not be saved: " +
+                insertProfileError.message
+            );
+          }
+        }
       }
 
       if (authData.session) {
@@ -673,24 +727,37 @@ function RegisterPage({
 
             <label className="field">
               <span>Class</span>
-              <input
-                name="class_name"
-                value={form.class_name}
-                onChange={updateField}
-                placeholder="Enter class"
-                required
-              />
+              <select name="class_name" value={form.class_name} onChange={updateField} required>
+                <option value="">Select class</option>
+                {CLASS_OPTIONS.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
             </label>
 
             <label className="field">
-              <span>Section</span>
-              <input
-                name="section"
-                value={form.section}
-                onChange={updateField}
-                placeholder="Enter section"
+              <span>Section type</span>
+              <select
+                name="section_type"
+                value={form.section_type}
+                onChange={(event) => setForm((previous) => ({
+                  ...previous,
+                  section_type: event.target.value,
+                  section: "",
+                }))}
                 required
-              />
+              >
+                <option value="letters">Alphabetical (A–Z)</option>
+                <option value="colors">Color names</option>
+              </select>
+            </label>
+
+            <label className="field">
+              <span>Section name</span>
+              <select name="section" value={form.section} onChange={updateField} required>
+                <option value="">Select section</option>
+                {(form.section_type === "letters" ? LETTER_SECTIONS : COLOR_SECTIONS).map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
             </label>
 
             {(form.institution_type === "High School" ||
@@ -784,8 +851,9 @@ function CompleteProfilePage({ profile, userEmail, onSaved, setGlobalError }) {
     age: profile.age == null ? "" : String(profile.age),
     gender: profile.gender || "",
     institution_type: profile.institution_type || "",
-    class_name: profile.class_name || "",
-    section: profile.section || "",
+    class_name: getClassOption(profile.class_name),
+    section: (getSectionType(profile.section) === "letters" ? LETTER_SECTIONS : COLOR_SECTIONS).includes(String(profile.section || "").trim().toUpperCase()) ? String(profile.section).trim().toUpperCase() : "",
+    section_type: getSectionType(profile.section),
     group_name: profile.group_name || "",
     roll_number: profile.roll_number || "",
   });
@@ -817,7 +885,8 @@ function CompleteProfilePage({ profile, userEmail, onSaved, setGlobalError }) {
 
     setSaving(true);
     const updateData = {
-      role: form.role,
+      // Never let profile completion change a user's permission role.
+      role: profile.role === "Teacher" ? "Teacher" : "Student",
       full_name: form.full_name.trim(),
       father_name: form.role === "Student" ? form.father_name.trim() : null,
       email: (form.email || userEmail).trim(),
@@ -861,10 +930,8 @@ function CompleteProfilePage({ profile, userEmail, onSaved, setGlobalError }) {
           <div className="form-grid">
             <label className="field">
               <span>Account type</span>
-              <select name="role" value={form.role} onChange={updateField} required>
-                <option value="Student">Student</option>
-                <option value="Teacher">Teacher</option>
-              </select>
+              <input value={profile.role === "Teacher" ? "Teacher" : "Student"} readOnly aria-readonly="true" />
+              <small>Account type cannot be changed from profile setup.</small>
             </label>
             <label className="field">
               <span>Full name</span>
@@ -909,11 +976,35 @@ function CompleteProfilePage({ profile, userEmail, onSaved, setGlobalError }) {
             </label>
             <label className="field">
               <span>Class</span>
-              <input name="class_name" value={form.class_name} onChange={updateField} required />
+              <select name="class_name" value={form.class_name} onChange={updateField} required>
+                <option value="">Select class</option>
+                {CLASS_OPTIONS.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
             </label>
             <label className="field">
-              <span>Section</span>
-              <input name="section" value={form.section} onChange={updateField} required />
+              <span>Section type</span>
+              <select
+                name="section_type"
+                value={form.section_type}
+                onChange={(event) => setForm((current) => ({
+                  ...current,
+                  section_type: event.target.value,
+                  section: "",
+                }))}
+                required
+              >
+                <option value="letters">Alphabetical (A–Z)</option>
+                <option value="colors">Color names</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Section name</span>
+              <select name="section" value={form.section} onChange={updateField} required>
+                <option value="">Select section</option>
+                {(form.section_type === "letters" ? LETTER_SECTIONS : COLOR_SECTIONS).map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
             </label>
             {(form.institution_type === "High School" || form.institution_type === "College") && (
               <label className="field">
@@ -1005,8 +1096,14 @@ function ProfileCard({ profile, onLogout }) {
 
 function TeacherDashboard({ profile, onLogout }) {
   const [students, setStudents] = useState([]);
-  const [selectedClass, setSelectedClass] = useState(profile.class_name || "");
-  const [selectedSection, setSelectedSection] = useState(profile.section || "");
+  const [selectedClass, setSelectedClass] = useState(getClassOption(profile.class_name));
+  const [selectedSectionType, setSelectedSectionType] = useState(getSectionType(profile.section));
+  const [selectedSection, setSelectedSection] = useState(
+    (getSectionType(profile.section) === "letters" ? LETTER_SECTIONS : COLOR_SECTIONS)
+      .includes(String(profile.section || "").trim().toUpperCase())
+      ? String(profile.section).trim().toUpperCase()
+      : ""
+  );
   const [homeworkList, setHomeworkList] = useState([]);
   const [completions, setCompletions] = useState([]);
   const [subject, setSubject] = useState("");
@@ -1227,28 +1324,50 @@ function TeacherDashboard({ profile, onLogout }) {
           <div className="form-grid">
             <label className="field">
               <span>Class to teach</span>
-              <input
+              <select
                 value={selectedClass}
                 onChange={(event) => {
                   setSelectedClass(event.target.value);
                   setTargetStudentId("");
                 }}
-                placeholder="Enter class"
                 required
-              />
+              >
+                <option value="">Select class</option>
+                {CLASS_OPTIONS.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
             </label>
 
             <label className="field">
-              <span>Section</span>
-              <input
+              <span>Section type</span>
+              <select
+                value={selectedSectionType}
+                onChange={(event) => {
+                  setSelectedSectionType(event.target.value);
+                  setSelectedSection("");
+                  setTargetStudentId("");
+                }}
+                required
+              >
+                <option value="letters">Alphabetical (A–Z)</option>
+                <option value="colors">Color names</option>
+              </select>
+            </label>
+
+            <label className="field">
+              <span>Section name</span>
+              <select
                 value={selectedSection}
                 onChange={(event) => {
                   setSelectedSection(event.target.value);
                   setTargetStudentId("");
                 }}
-                placeholder="Enter section"
                 required
-              />
+              >
+                <option value="">Select section</option>
+                {(selectedSectionType === "letters" ? LETTER_SECTIONS : COLOR_SECTIONS).map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
             </label>
 
             <label className="field">
