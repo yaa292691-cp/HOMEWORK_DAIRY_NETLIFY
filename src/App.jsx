@@ -1112,21 +1112,20 @@ function ProfileCard({ profile, onLogout }) {
 
 function TeacherDashboard({ profile, onLogout }) {
   const [students, setStudents] = useState([]);
+  const [homeworkList, setHomeworkList] = useState([]);
+  const [completions, setCompletions] = useState([]);
+  const [homeworkViews, setHomeworkViews] = useState([]);
   const [selectedClass, setSelectedClass] = useState(getClassOption(profile.class_name));
   const [selectedSectionType, setSelectedSectionType] = useState(getSectionType(profile.section));
   const [selectedSection, setSelectedSection] = useState(
-    (getSectionType(profile.section) === "letters" ? LETTER_SECTIONS : COLOR_SECTIONS)
-      .includes(String(profile.section || "").trim().toUpperCase())
-      ? String(profile.section).trim().toUpperCase()
-      : ""
+    String(profile.section || "").trim().toUpperCase()
   );
-  const [homeworkList, setHomeworkList] = useState([]);
-  const [completions, setCompletions] = useState([]);
   const [subject, setSubject] = useState("");
   const [homeworkText, setHomeworkText] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [targetType, setTargetType] = useState("class");
   const [targetStudentId, setTargetStudentId] = useState("");
+  const [homeworkTab, setHomeworkTab] = useState("current");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -1152,12 +1151,8 @@ function TeacherDashboard({ profile, onLogout }) {
       return;
     }
 
-    // Match institution names without case/extra-space differences.
-    // Keep students from all classes at this institution in memory;
-    // selected class and section determine recipients below.
     const sameInstitutionStudents = (studentData || []).filter((student) =>
-      normalizeText(student.institution_name) ===
-      normalizeText(profile.institution_name)
+      normalizeText(student.institution_name) === normalizeText(profile.institution_name)
     );
     setStudents(sameInstitutionStudents);
 
@@ -1173,30 +1168,47 @@ function TeacherDashboard({ profile, onLogout }) {
       return;
     }
 
-    setHomeworkList(homeworkData || []);
-
-    const homeworkIds = (homeworkData || []).map((item) => item.id);
+    const items = homeworkData || [];
+    setHomeworkList(items);
+    const homeworkIds = items.map((item) => item.id);
 
     if (homeworkIds.length) {
-      const { data: completionData, error: completionError } =
-        await supabase
-          .from("homework_completions")
-          .select("*")
-          .in("homework_id", homeworkIds);
+      const [completionResult, viewsResult] = await Promise.all([
+        supabase.from("homework_completions").select("*").in("homework_id", homeworkIds),
+        supabase.from("homework_views").select("*").in("homework_id", homeworkIds),
+      ]);
 
-      if (completionError) {
-        setError(
-          "Could not load finished homework: " + completionError.message
-        );
+      if (completionResult.error) {
+        setError("Could not load finished homework counts: " + completionResult.error.message);
       } else {
-        setCompletions(completionData || []);
+        setCompletions(completionResult.data || []);
+      }
+
+      if (viewsResult.error) {
+        setError((previous) => previous || ("Could not load homework view counts: " + viewsResult.error.message));
+        setHomeworkViews([]);
+      } else {
+        setHomeworkViews(viewsResult.data || []);
       }
     } else {
       setCompletions([]);
+      setHomeworkViews([]);
     }
 
     setLoading(false);
   }
+
+  const matchingStudents = students.filter((student) => {
+    if (
+      normalizeText(student.class_name) !== normalizeText(selectedClass) ||
+      normalizeText(student.section) !== normalizeText(selectedSection)
+    ) return false;
+
+    if (profile.institution_type === "High School" || profile.institution_type === "College") {
+      return normalizeText(student.group_name) === normalizeText(profile.group_name);
+    }
+    return true;
+  });
 
   async function sendHomework(event) {
     event.preventDefault();
@@ -1207,43 +1219,34 @@ function TeacherDashboard({ profile, onLogout }) {
       setError("Please select a student.");
       return;
     }
-
     if (!selectedClass.trim() || !selectedSection.trim()) {
-      setError("Please enter the class and section for this homework.");
+      setError("Please select the class and section for this homework.");
       return;
     }
-
     if (!subject.trim() || !homeworkText.trim() || !dueDate) {
       setError("Please enter the subject, homework details, and due date.");
       return;
     }
-
     if (targetType === "student" && !matchingStudents.some((student) => student.id === targetStudentId)) {
       setError("Please select a student from the selected class and section.");
       return;
     }
 
     setSending(true);
-
-    // These field names match your existing Supabase homework table.
+    // Use recipient_user_id, which is the actual column in the supplied SQL schema.
     const newHomework = {
       teacher_id: profile.id,
+      subject: subject.trim(),
+      homework_text: homeworkText.trim(),
+      due_date: dueDate,
+      recipient_user_id: targetType === "student" ? targetStudentId : null,
       recipient_institution_name: profile.institution_name,
       recipient_class_name: selectedClass.trim(),
       recipient_section: selectedSection.trim(),
       recipient_group_name: profile.group_name || null,
-      subject: subject.trim(),
-      homework_text: homeworkText.trim(),
-      due_date: dueDate,
-      recipient_type: targetType,
-      recipient_student_id:
-        targetType === "student" ? targetStudentId : null,
     };
 
-    const { error: insertError } = await supabase
-      .from("homework")
-      .insert(newHomework);
-
+    const { error: insertError } = await supabase.from("homework").insert(newHomework);
     if (insertError) {
       setError("Could not send homework: " + insertError.message);
     } else {
@@ -1255,345 +1258,78 @@ function TeacherDashboard({ profile, onLogout }) {
       setTargetStudentId("");
       await loadTeacherData();
     }
-
     setSending(false);
   }
 
-  const matchingStudents = students.filter((student) => {
-    if (
-      normalizeText(student.class_name) !== normalizeText(selectedClass) ||
-      normalizeText(student.section) !== normalizeText(selectedSection)
-    ) {
-      return false;
-    }
-
-    if (
-      profile.institution_type === "High School" ||
-      profile.institution_type === "College"
-    ) {
-      return normalizeText(student.group_name) === normalizeText(profile.group_name);
-    }
-
-    return true;
-  });
-
-  function getStudentName(studentId) {
-    return (
-      students.find((student) => student.id === studentId)?.full_name ||
-      "Student"
-    );
+  function getCountForHomework(rows, homeworkId) {
+    return rows.filter((row) => String(row.homework_id) === String(homeworkId)).length;
   }
 
-  const finishedCount = completions.length;
+  function getStudentName(studentId) {
+    return students.find((student) => student.id === studentId)?.full_name || "Selected student";
+  }
+
+  const today = new Date().toLocaleDateString("en-CA");
+  const currentHomework = homeworkList.filter((item) => !item.due_date || item.due_date >= today);
+  const historyHomework = homeworkList.filter((item) => item.due_date && item.due_date < today);
+  const displayedHomework = homeworkTab === "current" ? currentHomework : historyHomework;
 
   return (
     <div className="dashboard">
       <ProfileCard profile={profile} onLogout={onLogout} />
-
       <div className="dashboard-heading">
         <div>
           <span className="eyebrow">YOUR WORKSPACE</span>
           <h1>Teacher Dashboard</h1>
-          <p>Share assignments and follow student progress.</p>
+          <p>Share assignments and view student activity counts.</p>
         </div>
       </div>
 
       <div className="stats-grid">
-        <div className="stat-card">
-          <span className="stat-icon stat-blue">▤</span>
-          <div>
-            <span className="stat-label">Homework sent</span>
-            <strong>{homeworkList.length}</strong>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <span className="stat-icon stat-green">✓</span>
-          <div>
-            <span className="stat-label">Finished entries</span>
-            <strong>{finishedCount}</strong>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <span className="stat-icon stat-violet">♙</span>
-          <div>
-            <span className="stat-label">Matching students</span>
-            <strong>{matchingStudents.length}</strong>
-          </div>
-        </div>
+        <div className="stat-card"><span className="stat-icon stat-blue">▤</span><div><span className="stat-label">Homework sent</span><strong>{homeworkList.length}</strong></div></div>
+        <div className="stat-card"><span className="stat-icon stat-green">✓</span><div><span className="stat-label">Finished responses</span><strong>{completions.length}</strong></div></div>
+        <div className="stat-card"><span className="stat-icon stat-violet">♙</span><div><span className="stat-label">Matching students</span><strong>{matchingStudents.length}</strong></div></div>
       </div>
 
       <section className="panel">
-        <div className="section-heading">
-          <div className="section-icon">＋</div>
-          <div>
-            <h2>Send Homework</h2>
-            <p>Create an assignment for your class or one student.</p>
-          </div>
-        </div>
-
+        <div className="section-heading"><div className="section-icon">＋</div><div><h2>Send Homework</h2><p>Create an assignment for your class or one student.</p></div></div>
         {error && <div className="alert alert-error">{error}</div>}
         {success && <div className="alert alert-success">{success}</div>}
-
         <form onSubmit={sendHomework} className="form-stack">
           <div className="form-grid">
-            <label className="field">
-              <span>Class to teach</span>
-              <select
-                value={selectedClass}
-                onChange={(event) => {
-                  setSelectedClass(event.target.value);
-                  setTargetStudentId("");
-                }}
-                required
-              >
-                <option value="">Select class</option>
-                {CLASS_OPTIONS.map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>
-            </label>
-
-            <label className="field">
-              <span>Section type</span>
-              <select
-                value={selectedSectionType}
-                onChange={(event) => {
-                  setSelectedSectionType(event.target.value);
-                  setSelectedSection("");
-                  setTargetStudentId("");
-                }}
-                required
-              >
-                <option value="letters">Alphabetical (A–Z)</option>
-                <option value="colors">Color names</option>
-              </select>
-            </label>
-
-            <label className="field">
-              <span>Section name</span>
-              <select
-                value={selectedSection}
-                onChange={(event) => {
-                  setSelectedSection(event.target.value);
-                  setTargetStudentId("");
-                }}
-                required
-              >
-                <option value="">Select section</option>
-                {(selectedSectionType === "letters" ? LETTER_SECTIONS : COLOR_SECTIONS).map((name) => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="field">
-              <span>Subject</span>
-              <input
-                value={subject}
-                onChange={(event) => setSubject(event.target.value)}
-                placeholder="e.g. Mathematics"
-                required
-              />
-            </label>
-
-            <label className="field">
-              <span>Due date</span>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(event) => setDueDate(event.target.value)}
-                min={new Date().toLocaleDateString("en-CA")}
-                required
-              />
-            </label>
-
-            <label className="field field-wide">
-              <span>Homework instructions</span>
-              <textarea
-                value={homeworkText}
-                onChange={(event) => setHomeworkText(event.target.value)}
-                placeholder="Write the homework details..."
-                rows={4}
-                required
-              />
-            </label>
-
-            <label className="field">
-              <span>Send to</span>
-              <select
-                value={targetType}
-                onChange={(event) => {
-                  setTargetType(event.target.value);
-                  setTargetStudentId("");
-                }}
-              >
-                <option value="class">Entire Matching Class</option>
-                <option value="student">Specific Student</option>
-              </select>
-            </label>
-
-            {targetType === "student" && (
-              <label className="field">
-                <span>Select student</span>
-                <select
-                  value={targetStudentId}
-                  onChange={(event) =>
-                    setTargetStudentId(event.target.value)
-                  }
-                  required
-                >
-                  <option value="">Choose a student</option>
-                  {matchingStudents.map((student) => (
-                    <option key={student.id} value={student.id}>
-                      {student.full_name}
-                      {student.roll_number
-                        ? ` — Roll ${student.roll_number}`
-                        : ""}
-                    </option>
-                  ))}
-                </select>
-
-                {matchingStudents.length === 0 && (
-                  <small>No matching students were found for this class and section.</small>
-                )}
-              </label>
-            )}
+            <label className="field"><span>Class to teach</span><select value={selectedClass} onChange={(event) => { setSelectedClass(event.target.value); setTargetStudentId(""); }} required><option value="">Select class</option>{CLASS_OPTIONS.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
+            <label className="field"><span>Section type</span><select value={selectedSectionType} onChange={(event) => { setSelectedSectionType(event.target.value); setSelectedSection(""); setTargetStudentId(""); }} required><option value="letters">Alphabetical (A–Z)</option><option value="colors">Color names</option></select></label>
+            <label className="field"><span>Section name</span><select value={selectedSection} onChange={(event) => { setSelectedSection(event.target.value); setTargetStudentId(""); }} required><option value="">Select section</option>{(selectedSectionType === "letters" ? LETTER_SECTIONS : COLOR_SECTIONS).map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
+            <label className="field"><span>Subject</span><input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="e.g. Mathematics" required /></label>
+            <label className="field"><span>Due date</span><input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} min={new Date().toLocaleDateString("en-CA")} required /></label>
+            <label className="field field-wide"><span>Homework instructions</span><textarea value={homeworkText} onChange={(event) => setHomeworkText(event.target.value)} placeholder="Write the homework details..." rows={4} required /></label>
+            <label className="field"><span>Send to</span><select value={targetType} onChange={(event) => { setTargetType(event.target.value); setTargetStudentId(""); }}><option value="class">Entire Matching Class</option><option value="student">Specific Student</option></select></label>
+            {targetType === "student" && <label className="field"><span>Select student</span><select value={targetStudentId} onChange={(event) => setTargetStudentId(event.target.value)} required><option value="">Choose a student</option>{matchingStudents.map((student) => <option key={student.id} value={student.id}>{student.full_name}{student.roll_number ? ` — Roll ${student.roll_number}` : ""}</option>)}</select>{matchingStudents.length === 0 && <small>No matching students found for this class and section.</small>}</label>}
           </div>
-
-          <div className="form-actions">
-            <button
-              type="submit"
-              className="button button-primary"
-              disabled={sending}
-            >
-              {sending ? "Sending..." : "Send Homework"}
-              {!sending && <span aria-hidden="true">→</span>}
-            </button>
-          </div>
+          <div className="form-actions"><button type="submit" className="button button-primary" disabled={sending}>{sending ? "Sending..." : "Send Homework"}{!sending && <span aria-hidden="true"> →</span>}</button></div>
         </form>
       </section>
 
       <section className="panel">
-        <div className="section-heading">
-          <div className="section-icon">▤</div>
-          <div>
-            <h2>Sent Homework</h2>
-            <p>Assignments you have shared with students.</p>
-          </div>
+        <div className="section-heading"><div className="section-icon">▤</div><div><h2>Homework</h2><p>Only totals are shown for students who viewed or finished each assignment.</p></div></div>
+        <div className="homework-tabs" role="tablist" aria-label="Teacher homework sections">
+          <button type="button" className={`homework-tab ${homeworkTab === "current" ? "is-active" : ""}`} onClick={() => setHomeworkTab("current")}>Current Homework <span>{currentHomework.length}</span></button>
+          <button type="button" className={`homework-tab ${homeworkTab === "history" ? "is-active" : ""}`} onClick={() => setHomeworkTab("history")}>Homework History <span>{historyHomework.length}</span></button>
         </div>
-
-        {loading ? (
-          <p className="empty-state">Loading homework...</p>
-        ) : homeworkList.length === 0 ? (
-          <EmptyState
-            icon="▤"
-            title="No homework yet"
-            message="Your assignments will appear here after you send them."
-          />
+        {loading ? <p className="empty-state">Loading homework...</p> : displayedHomework.length === 0 ? (
+          <EmptyState icon="▤" title={homeworkTab === "current" ? "No current homework" : "No homework history yet"} message={homeworkTab === "current" ? "New assignments with upcoming due dates will appear here." : "Assignments will appear here after their due dates pass."} />
         ) : (
           <div className="homework-list">
-            {homeworkList.map((item) => (
-              <article className="homework-card" key={item.id}>
-                <div className="homework-card-top">
-                  <span className="subject-tag">{item.subject}</span>
-                  <span className="status-pill status-blue">
-                    {item.recipient_type === "student"
-                      ? "Specific student"
-                      : "Whole class"}
-                  </span>
-                </div>
-
-                <h3>{item.subject}</h3>
-                <p className="homework-description">
-                  {item.homework_text}
-                </p>
-
-                <div className="homework-meta">
-                  <span>
-                    <strong>Due:</strong> {item.due_date}
-                  </span>
-                  <span>
-                    <strong>Sent to:</strong>{" "}
-                    {item.recipient_type === "student"
-                      ? getStudentName(item.recipient_student_id)
-                      : "Entire Matching Class"}
-                  </span>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="panel">
-        <div className="section-heading">
-          <div className="section-icon section-icon-green">✓</div>
-          <div>
-            <h2>Finished Homework</h2>
-            <p>See which students have completed their assignments.</p>
-          </div>
-        </div>
-
-        {completions.length === 0 ? (
-          <EmptyState
-            icon="✓"
-            title="Nothing finished yet"
-            message="Completed homework will appear here."
-          />
-        ) : (
-          <div className="homework-list">
-            {completions.map((completion) => {
-              const item = homeworkList.find(
-                (homework) => homework.id === completion.homework_id
-              );
-
-              const student = students.find(
-                (entry) => entry.id === completion.student_id
-              );
-
-              if (!item) return null;
-
-              return (
-                <article className="homework-card" key={completion.id}>
-                  <div className="homework-card-top">
-                    <span className="subject-tag">{item.subject}</span>
-                    <span className="status-pill status-green">
-                      ✓ Finished
-                    </span>
-                  </div>
-
-                  <h3>{item.subject}</h3>
-                  <p className="homework-description">
-                    {item.homework_text}
-                  </p>
-
-                  <div className="completion-student">
-                    {student?.photo_url ? (
-                      <img src={student.photo_url} alt="" />
-                    ) : (
-                      <span className="mini-avatar">
-                        {student?.full_name?.charAt(0) || "S"}
-                      </span>
-                    )}
-
-                    <div>
-                      <strong>{student?.full_name || "Student"}</strong>
-                      <small>
-                        {student?.roll_number
-                          ? `Roll number: ${student.roll_number}`
-                          : "Student"}
-                      </small>
-                    </div>
-                  </div>
-
-                  {completion.completed_at && (
-                    <p className="completion-date">
-                      Finished{" "}
-                      {new Date(completion.completed_at).toLocaleString()}
-                    </p>
-                  )}
-                </article>
-              );
+            {displayedHomework.map((item) => {
+              const viewedCount = getCountForHomework(homeworkViews, item.id);
+              const finishedCount = getCountForHomework(completions, item.id);
+              const isSpecificStudent = Boolean(item.recipient_user_id);
+              return <article className="homework-card" key={item.id}>
+                <div className="homework-card-top"><span className="subject-tag">{item.subject}</span><span className={`status-pill ${homeworkTab === "history" ? "status-muted" : "status-blue"}`}>{homeworkTab === "history" ? "Past due" : "Current"}</span></div>
+                <h3>{item.subject}</h3><p className="homework-description">{item.homework_text}</p>
+                <div className="homework-meta"><span><strong>Due:</strong> {item.due_date || "No due date"}</span><span><strong>Sent to:</strong> {isSpecificStudent ? getStudentName(item.recipient_user_id) : "Entire Matching Class"}</span></div>
+                <div className="homework-counts"><div><span className="count-label">Students who viewed</span><strong>{viewedCount}</strong></div><div><span className="count-label">Students who finished</span><strong>{finishedCount}</strong></div></div>
+              </article>;
             })}
           </div>
         )}
@@ -1608,6 +1344,7 @@ function StudentDashboard({ profile, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [workingId, setWorkingId] = useState(null);
+  const [homeworkTab, setHomeworkTab] = useState("current");
 
   useEffect(() => {
     loadStudentData();
@@ -1617,11 +1354,8 @@ function StudentDashboard({ profile, onLogout }) {
   async function loadStudentData() {
     setLoading(true);
     setError("");
-
     const { data: allHomework, error: homeworkError } = await supabase
-      .from("homework")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .from("homework").select("*").order("created_at", { ascending: false });
 
     if (homeworkError) {
       setError("Could not load homework: " + homeworkError.message);
@@ -1629,244 +1363,101 @@ function StudentDashboard({ profile, onLogout }) {
       return;
     }
 
-    // Use the actual recipient_* column names from Supabase.
     const matchingHomework = (allHomework || []).filter((item) => {
+      if (item.recipient_user_id) return item.recipient_user_id === profile.id;
       if (
-        normalizeText(item.recipient_institution_name) !==
-          normalizeText(profile.institution_name) ||
-        normalizeText(item.recipient_class_name) !==
-          normalizeText(profile.class_name) ||
-        normalizeText(item.recipient_section) !==
-          normalizeText(profile.section)
-      ) {
-        return false;
+        normalizeText(item.recipient_institution_name) !== normalizeText(profile.institution_name) ||
+        normalizeText(item.recipient_class_name) !== normalizeText(profile.class_name) ||
+        normalizeText(item.recipient_section) !== normalizeText(profile.section)
+      ) return false;
+      if (profile.institution_type === "High School" || profile.institution_type === "College") {
+        return normalizeText(item.recipient_group_name) === normalizeText(profile.group_name);
       }
-
-      if (
-        profile.institution_type === "High School" ||
-        profile.institution_type === "College"
-      ) {
-        if (
-          normalizeText(item.recipient_group_name) !==
-          normalizeText(profile.group_name)
-        ) {
-          return false;
-        }
-      }
-
-      if (
-        item.recipient_type === "student" &&
-        item.recipient_student_id !== profile.id
-      ) {
-        return false;
-      }
-
       return true;
     });
-
     setHomeworkList(matchingHomework);
 
+    // Record one view per student and homework. The composite primary key prevents duplicates.
+    if (matchingHomework.length) {
+      const viewRows = matchingHomework.map((item) => ({ homework_id: item.id, student_id: profile.id }));
+      const { error: viewsError } = await supabase.from("homework_views").upsert(viewRows, {
+        onConflict: "homework_id,student_id",
+        ignoreDuplicates: true,
+      });
+      if (viewsError) setError("Homework loaded, but view tracking failed: " + viewsError.message);
+    }
+
     const ids = matchingHomework.map((item) => item.id);
-
     if (ids.length) {
-      const { data: completionData, error: completionError } =
-        await supabase
-          .from("homework_completions")
-          .select("*")
-          .eq("student_id", profile.id)
-          .in("homework_id", ids);
-
-      if (completionError) {
-        setError(
-          "Could not load homework history: " + completionError.message
-        );
-      } else {
-        setCompletions(completionData || []);
-      }
+      const { data: completionData, error: completionError } = await supabase
+        .from("homework_completions").select("*").eq("student_id", profile.id).in("homework_id", ids);
+      if (completionError) setError("Could not load finished homework: " + completionError.message);
+      else setCompletions(completionData || []);
     } else {
       setCompletions([]);
     }
-
     setLoading(false);
   }
 
   function isFinished(homeworkId) {
-    return completions.some((item) => item.homework_id === homeworkId);
+    return completions.some((item) => String(item.homework_id) === String(homeworkId));
   }
 
   async function finishHomework(item) {
     if (isFinished(item.id)) return;
-
     setError("");
     setWorkingId(item.id);
-
     const { data, error: completionError } = await supabase
       .from("homework_completions")
-      .insert({
-        homework_id: item.id,
-        student_id: profile.id,
-        completed_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
+      .upsert({ homework_id: item.id, student_id: profile.id }, { onConflict: "homework_id,student_id", ignoreDuplicates: true })
+      .select().maybeSingle();
 
     if (completionError) {
-      setError(
-        "Could not mark homework as finished: " + completionError.message
-      );
+      setError("Could not mark homework as finished: " + completionError.message);
+    } else if (data) {
+      setCompletions((previous) => previous.some((row) => String(row.homework_id) === String(item.id)) ? previous : [...previous, data]);
     } else {
-      setCompletions((previous) => [...previous, data]);
+      // The row may already exist if the button was pressed twice; reload to sync status.
+      await loadStudentData();
     }
-
     setWorkingId(null);
   }
 
   const today = new Date().toLocaleDateString("en-CA");
-
-  const activeHomework = homeworkList.filter(
-    (item) => !isFinished(item.id) && item.due_date >= today
-  );
-
-  const historyHomework = homeworkList.filter(
-    (item) => isFinished(item.id) || item.due_date < today
-  );
+  // Keep completed work in Current Homework until its due date has passed.
+  const currentHomework = homeworkList.filter((item) => !item.due_date || item.due_date >= today);
+  const historyHomework = homeworkList.filter((item) => item.due_date && item.due_date < today);
+  const displayedHomework = homeworkTab === "current" ? currentHomework : historyHomework;
 
   return (
     <div className="dashboard">
       <ProfileCard profile={profile} onLogout={onLogout} />
-
-      <div className="dashboard-heading">
-        <div>
-          <span className="eyebrow">YOUR LEARNING SPACE</span>
-          <h1>Student Dashboard</h1>
-          <p>Keep up with your assignments, one task at a time.</p>
-        </div>
-      </div>
-
+      <div className="dashboard-heading"><div><span className="eyebrow">YOUR LEARNING SPACE</span><h1>Student Dashboard</h1><p>Keep up with your assignments, one task at a time.</p></div></div>
       <div className="stats-grid stats-grid-student">
-        <div className="stat-card">
-          <span className="stat-icon stat-blue">▤</span>
-          <div>
-            <span className="stat-label">Active homework</span>
-            <strong>{activeHomework.length}</strong>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <span className="stat-icon stat-green">✓</span>
-          <div>
-            <span className="stat-label">Finished</span>
-            <strong>{completions.length}</strong>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <span className="stat-icon stat-violet">◷</span>
-          <div>
-            <span className="stat-label">History items</span>
-            <strong>{historyHomework.length}</strong>
-          </div>
-        </div>
+        <div className="stat-card"><span className="stat-icon stat-blue">▤</span><div><span className="stat-label">Current homework</span><strong>{currentHomework.length}</strong></div></div>
+        <div className="stat-card"><span className="stat-icon stat-green">✓</span><div><span className="stat-label">Finished</span><strong>{completions.length}</strong></div></div>
+        <div className="stat-card"><span className="stat-icon stat-violet">◷</span><div><span className="stat-label">Homework history</span><strong>{historyHomework.length}</strong></div></div>
       </div>
-
       <section className="panel">
-        <div className="section-heading">
-          <div className="section-icon">▤</div>
-          <div>
-            <h2>My Homework</h2>
-            <p>Complete these assignments before their due dates.</p>
-          </div>
-        </div>
-
+        <div className="section-heading"><div className="section-icon">▤</div><div><h2>My Homework</h2><p>Assignments move to history after their due date.</p></div></div>
         {error && <div className="alert alert-error">{error}</div>}
-
-        {loading ? (
-          <p className="empty-state">Loading homework...</p>
-        ) : activeHomework.length === 0 ? (
-          <EmptyState
-            icon="✓"
-            title="You're all caught up"
-            message="There is no active homework for you right now."
-          />
-        ) : (
-          <div className="homework-list">
-            {activeHomework.map((item) => (
-              <article className="homework-card" key={item.id}>
-                <div className="homework-card-top">
-                  <span className="subject-tag">{item.subject}</span>
-                  <span className="status-pill status-blue">To do</span>
-                </div>
-
-                <h3>{item.subject}</h3>
-                <p className="homework-description">
-                  {item.homework_text}
-                </p>
-
-                <div className="homework-meta">
-                  <span>
-                    <strong>Due:</strong> {item.due_date}
-                  </span>
-                </div>
-
-                <div className="homework-card-actions">
-                  <button
-                    className="button button-primary"
-                    onClick={() => finishHomework(item)}
-                    disabled={workingId === item.id}
-                  >
-                    {workingId === item.id ? "Saving..." : "✓ Finished"}
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="panel">
-        <div className="section-heading">
-          <div className="section-icon section-icon-green">◷</div>
-          <div>
-            <h2>History Homework</h2>
-            <p>Review finished and past-due assignments.</p>
-          </div>
+        <div className="homework-tabs" role="tablist" aria-label="Student homework sections">
+          <button type="button" className={`homework-tab ${homeworkTab === "current" ? "is-active" : ""}`} onClick={() => setHomeworkTab("current")}>Current Homework <span>{currentHomework.length}</span></button>
+          <button type="button" className={`homework-tab ${homeworkTab === "history" ? "is-active" : ""}`} onClick={() => setHomeworkTab("history")}>Homework History <span>{historyHomework.length}</span></button>
         </div>
-
-        {loading ? (
-          <p className="empty-state">Loading history...</p>
-        ) : historyHomework.length === 0 ? (
-          <EmptyState
-            icon="◷"
-            title="Your history is empty"
-            message="Finished or past-due assignments will appear here."
-          />
+        {loading ? <p className="empty-state">Loading homework...</p> : displayedHomework.length === 0 ? (
+          <EmptyState icon={homeworkTab === "current" ? "✓" : "◷"} title={homeworkTab === "current" ? "No current homework" : "Your history is empty"} message={homeworkTab === "current" ? "New assignments will appear here." : "Assignments will appear here after their due dates pass."} />
         ) : (
           <div className="homework-list">
-            {historyHomework.map((item) => (
-              <article className="homework-card history-card" key={item.id}>
-                <div className="homework-card-top">
-                  <span className="subject-tag">{item.subject}</span>
-                  <span
-                    className={`status-pill ${
-                      isFinished(item.id) ? "status-green" : "status-muted"
-                    }`}
-                  >
-                    {isFinished(item.id) ? "✓ Finished" : "Past due"}
-                  </span>
-                </div>
-
-                <h3>{item.subject}</h3>
-                <p className="homework-description">
-                  {item.homework_text}
-                </p>
-
-                <div className="homework-meta">
-                  <span>
-                    <strong>Due:</strong> {item.due_date}
-                  </span>
-                </div>
-              </article>
-            ))}
+            {displayedHomework.map((item) => {
+              const finished = isFinished(item.id);
+              return <article className="homework-card" key={item.id}>
+                <div className="homework-card-top"><span className="subject-tag">{item.subject}</span><span className={`status-pill ${finished ? "status-green" : homeworkTab === "history" ? "status-muted" : "status-blue"}`}>{finished ? "✓ Finished" : homeworkTab === "history" ? "Past due" : "To do"}</span></div>
+                <h3>{item.subject}</h3><p className="homework-description">{item.homework_text}</p>
+                <div className="homework-meta"><span><strong>Due:</strong> {item.due_date || "No due date"}</span></div>
+                {homeworkTab === "current" && <div className="homework-card-actions"><button type="button" className="button button-primary" onClick={() => finishHomework(item)} disabled={finished || workingId === item.id}>{workingId === item.id ? "Saving..." : finished ? "✓ Finished" : "Finished"}</button></div>}
+              </article>;
+            })}
           </div>
         )}
       </section>
